@@ -75,6 +75,7 @@ type AppliedFilters = {
   members: string[];
   priority: string[];
   difficulty: string[];
+  progressMode: "all" | "exclude_completed" | "completed_only";
   dateFrom: string;
   dateTo: string;
 };
@@ -151,6 +152,12 @@ const STATE_GROUP_LABELS: Record<string, string> = {
   cancelled: "취소",
 };
 
+const PROGRESS_FILTER_LABELS = {
+  all: "전체",
+  exclude_completed: "완료 제외",
+  completed_only: "완료만",
+} as const;
+
 const PRIORITY_LABELS: Record<string, string> = {
   none: "없음",
   low: "낮음",
@@ -173,7 +180,7 @@ const STATE_GROUP_ACCENT: Record<string, string> = {
   cancelled: "#ef4444",
 };
 
-const DISPLAY_ORDER = ["started", "unstarted", "backlog", "completed", "cancelled"] as const;
+const DISPLAY_ORDER = ["started", "unstarted", "backlog", "completed"] as const;
 const DAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
 const DAY_IN_MS = 1000 * 60 * 60 * 24;
 const DEFAULT_DURATION_DAYS = 7;
@@ -185,6 +192,7 @@ const EMPTY_FILTERS: AppliedFilters = {
   members: [],
   priority: [],
   difficulty: [],
+  progressMode: "all",
   dateFrom: "",
   dateTo: "",
 };
@@ -286,6 +294,32 @@ function escapeCsvValue(value: string | number): string {
 
 function buildCsvContent(rows: Array<Array<string | number>>): string {
   return rows.map((row) => row.map((cell) => escapeCsvValue(cell)).join(",")).join("\n");
+}
+
+function buildExportBucketHeaders(
+  timelineScale: "week" | "month",
+  weekMarkers: TimelineMarker[],
+  days: TimelineDay[],
+): Array<{ key: string; label: string; start: Date; end: Date }> {
+  if (timelineScale === "month") {
+    return weekMarkers.map((marker) => ({
+      key: marker.key,
+      label: `${marker.start.getMonth() + 1}월 ${marker.compactLabel ?? marker.label}`,
+      start: marker.start,
+      end: marker.end,
+    }));
+  }
+
+  return days.map((day) => ({
+    key: day.key,
+    label: formatDateInputValue(day.date),
+    start: day.date,
+    end: day.date,
+  }));
+}
+
+function doesRangeOverlap(start: Date, end: Date, rangeStart: Date, rangeEnd: Date): boolean {
+  return start <= rangeEnd && end >= rangeStart;
 }
 
 function getAssigneeLabel(assignees: AssigneeInfo[]): string {
@@ -634,6 +668,7 @@ export default function WbsPage() {
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [selectedPriority, setSelectedPriority] = useState<string[]>([]);
   const [selectedDifficulty, setSelectedDifficulty] = useState<string[]>([]);
+  const [selectedProgressMode, setSelectedProgressMode] = useState<AppliedFilters["progressMode"]>("all");
   const [dateFrom, setDateFrom] = useState(() => getDefaultDateWindow().dateFrom);
   const [dateTo, setDateTo] = useState(() => getDefaultDateWindow().dateTo);
   const [appliedFilters, setAppliedFilters] = useState<AppliedFilters>(() => {
@@ -658,6 +693,7 @@ export default function WbsPage() {
       members: [...selectedMembers],
       priority: [...selectedPriority],
       difficulty: [...selectedDifficulty],
+      progressMode: selectedProgressMode,
       dateFrom,
       dateTo,
     });
@@ -687,6 +723,9 @@ export default function WbsPage() {
     }
     if (appliedFilters.difficulty.length > 0) {
       searchParams.set("difficulty", appliedFilters.difficulty.join(","));
+    }
+    if (appliedFilters.progressMode !== "all") {
+      searchParams.set("progressMode", appliedFilters.progressMode);
     }
     if (appliedFilters.dateFrom) {
       searchParams.set("dateFrom", appliedFilters.dateFrom);
@@ -754,12 +793,14 @@ export default function WbsPage() {
     selectedStateGroups.length +
     selectedMembers.length +
     selectedPriority.length +
-    selectedDifficulty.length;
+    selectedDifficulty.length +
+    (selectedProgressMode === "all" ? 0 : 1);
   const appliedFilterCount =
     appliedFilters.stateGroups.length +
     appliedFilters.members.length +
     appliedFilters.priority.length +
-    appliedFilters.difficulty.length;
+    appliedFilters.difficulty.length +
+    (appliedFilters.progressMode === "all" ? 0 : 1);
   const defaultDateWindow = getDefaultDateWindow();
   const hasDraftDateChanges =
     dateFrom !== defaultDateWindow.dateFrom || dateTo !== defaultDateWindow.dateTo;
@@ -810,15 +851,23 @@ export default function WbsPage() {
       return;
     }
 
+    const exportBuckets = buildExportBucketHeaders(
+      timelineScale,
+      timeline.weekMarkers,
+      timeline.days,
+    );
+
     const rows: Array<Array<string | number>> = [
       ["프로젝트명", wbs.project.name],
       ["프로젝트 코드", wbs.project.identifier],
       ["내보낸 시각", formatKoreanFullDate(new Date())],
       ["조회 기간", `${appliedFilters.dateFrom || "전체"} ~ ${appliedFilters.dateTo || "전체"}`],
+      ["타임라인 보기", timelineScale === "month" ? "월 단위" : "주 단위"],
       [],
       [
         "WBS",
         "구분",
+        "상태 그룹",
         "작업명",
         "담당자",
         "시작일",
@@ -827,21 +876,28 @@ export default function WbsPage() {
         "진행률(%)",
         "우선순위",
         "난이도",
+        ...exportBuckets.map((bucket) => `간트 ${bucket.label}`),
       ],
     ];
 
     for (const row of timeline.rows) {
+      const ganttCells = exportBuckets.map((bucket) =>
+        doesRangeOverlap(row.start, row.end, bucket.start, bucket.end) ? "■" : "",
+      );
+
       rows.push([
         row.wbsCode,
         row.kind === "phase" ? "상태 그룹" : "작업",
+        STATE_GROUP_LABELS[row.group] ?? row.group,
         row.title,
         row.owner,
         formatDateForExport(row.start),
         formatDateForExport(row.end),
         row.durationDays,
         row.progress,
-        row.kind === "task" ? row.priorityLabel : "-",
-        row.kind === "task" ? row.difficultyLabel : "-",
+        row.kind === "task" ? row.priorityLabel : "",
+        row.kind === "task" ? row.difficultyLabel : "",
+        ...ganttCells,
       ]);
     }
 
@@ -957,6 +1013,7 @@ export default function WbsPage() {
     setSelectedMembers([]);
     setSelectedPriority([]);
     setSelectedDifficulty([]);
+    setSelectedProgressMode("all");
     setDateFrom(defaults.dateFrom);
     setDateTo(defaults.dateTo);
     setAppliedFilters({ ...EMPTY_FILTERS, dateFrom: defaults.dateFrom, dateTo: defaults.dateTo });
@@ -1173,6 +1230,25 @@ export default function WbsPage() {
                 onClick={() => toggleStateGroup(group)}
               >
                 {STATE_GROUP_LABELS[group] ?? group}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className={styles.filterGroup}>
+          <span className={styles.filterLabel}>진행률</span>
+          <div className={styles.filterChips}>
+            {(Object.entries(PROGRESS_FILTER_LABELS) as Array<[
+              AppliedFilters["progressMode"],
+              string,
+            ]>).map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                className={`${styles.filterChip} ${selectedProgressMode === mode ? styles.filterChipActive : ""}`}
+                onClick={() => setSelectedProgressMode(mode)}
+              >
+                {label}
               </button>
             ))}
           </div>

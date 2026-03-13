@@ -166,6 +166,7 @@ export async function GET(
     searchParams.get("priority")?.split(",").map((v) => v.trim()).filter(Boolean) ?? [];
   const filterDifficulty =
     searchParams.get("difficulty")?.split(",").map((v) => v.trim()).filter(Boolean) ?? [];
+  const progressMode = searchParams.get("progressMode") ?? "all";
 
   const dateFromParam = searchParams.get("dateFrom");
   const dateToParam = searchParams.get("dateTo");
@@ -214,13 +215,16 @@ export async function GET(
     let inProgress = 0;
     let todo = 0;
     let backlog = 0;
-    let cancelled = 0;
-
     const rows: WbsRow[] = [];
 
     for (const workItem of workItems) {
       const state = stateMap.get(workItem.state);
       const group = state?.group ?? "unstarted";
+
+      if (group === "cancelled") continue;
+
+      if (progressMode === "exclude_completed" && group === "completed") continue;
+      if (progressMode === "completed_only" && group !== "completed") continue;
 
       if (filterStateGroups.length > 0 && !filterStateGroups.includes(group)) continue;
       if (filterPriority.length > 0 && !filterPriority.includes(workItem.priority)) continue;
@@ -258,9 +262,6 @@ export async function GET(
           break;
         case "backlog":
           backlog += 1;
-          break;
-        case "cancelled":
-          cancelled += 1;
           break;
         default:
           todo += 1;
@@ -328,11 +329,11 @@ export async function GET(
         in_progress: inProgress,
         todo,
         backlog,
-        cancelled,
+        cancelled: 0,
         completion_rate: completionRate,
       },
       filters: {
-        available_state_groups: ["backlog", "unstarted", "started", "completed", "cancelled"],
+        available_state_groups: ["backlog", "unstarted", "started", "completed"],
         available_priorities: ["none", "low", "medium", "high", "urgent"],
         available_assignees: members.map((m) => ({
           id: m.id,
