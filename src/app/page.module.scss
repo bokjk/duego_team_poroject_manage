@@ -1,0 +1,281 @@
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.hero {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.18), rgba(27, 30, 43, 0.9));
+  border: 1px solid rgba(129, 140, 248, 0.2);
+  border-radius: 16px;
+  padding: 26px;
+}
+
+.workspace {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(129, 140, 248, 0.4);
+  color: var(--accent-hover);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 6px 10px;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+}
+
+.greeting {
+  font-size: clamp(24px, 4vw, 32px);
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.description {
+  margin-top: 8px;
+  color: var(--text-secondary);
+  max-width: 750px;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.statCard {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.statLabel {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.statValue {
+  display: block;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.projectsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.projectsTitle {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.projectsSub {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.projectGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+.projectCardLink {
+  display: block;
+}
+
+.projectCard {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  cursor: pointer;
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.projectCard:hover {
+  transform: translateY(-4px);
+  border-color: rgba(129, 140, 248, 0.65);
+  box-shadow: 0 16px 28px rgba(7, 8, 12, 0.35);
+}
+
+.cardTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.projectName {
+  font-size: 22px;
+  line-height: 1.25;
+  font-weight: 700;
+}
+
+.identifier {
+  background: rgba(129, 140, 248, 0.15);
+  color: #c8cbff;
+  border: 1px solid rgba(129, 140, 248, 0.4);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.projectDescription {
+  color: var(--text-secondary);
+  min-height: 45px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+.meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.metaLabel {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.metaValue {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.roleBadge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 700;
+  width: fit-content;
+  text-transform: uppercase;
+}
+
+.roleOwner {
+  background: rgba(34, 197, 94, 0.16);
+  border-color: rgba(34, 197, 94, 0.4);
+  color: #8df0b1;
+}
+
+.roleAdmin {
+  background: rgba(245, 158, 11, 0.16);
+  border-color: rgba(245, 158, 11, 0.35);
+  color: #f9d38f;
+}
+
+.roleMember {
+  background: rgba(99, 102, 241, 0.2);
+  border-color: rgba(129, 140, 248, 0.5);
+  color: #bec1ff;
+}
+
+.roleViewer,
+.roleGuest {
+  background: rgba(161, 161, 170, 0.16);
+  border-color: rgba(161, 161, 170, 0.25);
+  color: #d4d4da;
+}
+
+.roleUnknown {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+}
+
+.loadingWrap {
+  display: grid;
+  gap: 16px;
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(46, 50, 71, 0.42) 25%,
+    rgba(74, 80, 111, 0.52) 37%,
+    rgba(46, 50, 71, 0.42) 63%
+  );
+  background-size: 400% 100%;
+  animation: shimmer 1.35s ease-in-out infinite;
+  border-radius: 12px;
+  min-height: 148px;
+}
+
+.errorBox {
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.12);
+  color: #fecaca;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.errorTitle {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.empty {
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 40px 16px;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+
+  100% {
+    background-position: 0 0;
+  }
+}
+
+@media (min-width: 700px) {
+  .projectGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1080px) {
+  .projectGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .hero {
+    padding: 20px;
+  }
+
+  .stats {
+    grid-template-columns: 1fr;
+  }
+
+  .projectCard {
+    padding: 18px;
+  }
+}
