@@ -278,7 +278,9 @@ function formatDateForExport(date: Date): string {
 }
 
 function escapeCsvValue(value: string | number): string {
-  const normalized = String(value).replaceAll('"', '""');
+  const raw = String(value);
+  const formulaSafe = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
+  const normalized = formulaSafe.replaceAll('"', '""');
   return /[",\n]/.test(normalized) ? `"${normalized}"` : normalized;
 }
 
