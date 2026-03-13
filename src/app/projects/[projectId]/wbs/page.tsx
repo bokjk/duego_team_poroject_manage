@@ -652,6 +652,8 @@ export default function WbsPage() {
   const scrollHeaderRef = useRef<HTMLDivElement | null>(null);
   const frozenRowRefs = useRef<Array<HTMLDivElement | null>>([]);
   const scrollRowRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const modalRef = useRef<HTMLDivElement | null>(null);
+  const lastTriggerRef = useRef<HTMLButtonElement | null>(null);
   const hasAutoScrolledToTodayRef = useRef(false);
   const dragStateRef = useRef<{
     pointerId: number;
@@ -677,6 +679,7 @@ export default function WbsPage() {
   });
   const [timelineScale, setTimelineScale] = useState<"week" | "month">("month");
   const [timelineZoom, setTimelineZoom] = useState(0.75);
+  const [selectedTask, setSelectedTask] = useState<TaskPresentationRow | null>(null);
 
   const toggleStateGroup = makeToggler(setSelectedStateGroups);
   const togglePriority = makeToggler(setSelectedPriority);
@@ -1029,6 +1032,55 @@ export default function WbsPage() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!selectedTask) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSelectedTask(null);
+        return;
+      }
+
+      if (event.key !== "Tab" || !modalRef.current) {
+        return;
+      }
+
+      const focusableElements = Array.from(
+        modalRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => !element.hasAttribute("disabled") && element.tabIndex !== -1);
+
+      if (focusableElements.length === 0) {
+        event.preventDefault();
+        return;
+      }
+
+      const firstFocusable = focusableElements[0];
+      const lastFocusable = focusableElements[focusableElements.length - 1];
+      const activeElement = document.activeElement;
+
+      if (event.shiftKey && activeElement === firstFocusable) {
+        event.preventDefault();
+        lastFocusable.focus();
+      } else if (!event.shiftKey && activeElement === lastFocusable) {
+        event.preventDefault();
+        firstFocusable.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "";
+      lastTriggerRef.current?.focus();
+    };
+  }, [selectedTask]);
 
   useLayoutEffect(() => {
     frozenRowRefs.current.length = timeline.rows.length;
@@ -1449,12 +1501,24 @@ export default function WbsPage() {
                   >
                     <div className={`${styles.frozenCell} ${styles.frozenCodeCell}`}>{row.wbsCode}</div>
                     <div className={`${styles.frozenCell} ${styles.frozenTitleCell}`}>
-                      <span className={row.kind === "phase" ? styles.phaseTitle : styles.taskTitle}>
-                        {row.title}
-                      </span>
                       {row.kind === "phase" ? (
-                        <span className={styles.phaseTaskCount}>{row.taskCount}건</span>
-                      ) : null}
+                        <>
+                          <span className={styles.phaseTitle}>{row.title}</span>
+                          <span className={styles.phaseTaskCount}>{row.taskCount}건</span>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          className={styles.taskTitleButton}
+                          aria-label={`작업 상세 보기: ${row.title}`}
+                          onClick={(event) => {
+                            lastTriggerRef.current = event.currentTarget;
+                            setSelectedTask(row);
+                          }}
+                        >
+                          <span className={styles.taskTitle}>{row.title}</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -1606,6 +1670,117 @@ export default function WbsPage() {
           </div>
         )}
       </section>
+
+      {selectedTask ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="task-modal-title"
+          className={styles.modalBackdrop}
+          onClick={() => setSelectedTask(null)}
+        >
+          <div
+            ref={modalRef}
+            className={styles.modal}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className={styles.modalHeader}>
+              <div className={styles.modalHeaderMeta}>
+                <span className={styles.modalWbsCode}>{selectedTask.wbsCode}</span>
+                <span
+                  className={styles.modalStateGroup}
+                  style={{
+                    color: selectedTask.barColor,
+                    borderColor: `${selectedTask.barColor}55`,
+                    background: `${selectedTask.barColor}14`,
+                  }}
+                >
+                  {STATE_GROUP_LABELS[selectedTask.group] ?? selectedTask.group}
+                </span>
+              </div>
+              <button
+                type="button"
+                className={styles.modalClose}
+                aria-label="모달 닫기"
+                autoFocus
+                onClick={() => setSelectedTask(null)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <h2 id="task-modal-title" className={styles.modalTitle}>
+              {selectedTask.title}
+            </h2>
+
+            <div className={styles.modalGrid}>
+              <div className={styles.modalField}>
+                <span className={styles.modalFieldLabel}>담당자</span>
+                <span className={styles.modalFieldValue}>{selectedTask.owner}</span>
+              </div>
+              <div className={styles.modalField}>
+                <span className={styles.modalFieldLabel}>우선순위</span>
+                <span className={`${styles.priorityBadge} ${getPriorityClassName(selectedTask.priority)}`}>
+                  {selectedTask.priorityLabel}
+                </span>
+              </div>
+              <div className={styles.modalField}>
+                <span className={styles.modalFieldLabel}>시작일</span>
+                <span className={styles.modalFieldValue}>{formatKoreanFullDate(selectedTask.start)}</span>
+              </div>
+              <div className={styles.modalField}>
+                <span className={styles.modalFieldLabel}>종료일</span>
+                <span className={styles.modalFieldValue}>{formatKoreanFullDate(selectedTask.end)}</span>
+              </div>
+              <div className={styles.modalField}>
+                <span className={styles.modalFieldLabel}>기간</span>
+                <span className={styles.modalFieldValue}>{selectedTask.durationDays}일</span>
+              </div>
+              <div className={styles.modalField}>
+                <span className={styles.modalFieldLabel}>난이도</span>
+                <span className={`${styles.difficultyBadge} ${styles.modalDifficultyValue}`}>
+                  {selectedTask.difficultyLabel}
+                </span>
+              </div>
+              {wbs ? (
+                <div className={`${styles.modalField} ${styles.modalFieldFull}`}>
+                  <span className={styles.modalFieldLabel}>프로젝트</span>
+                  <span className={styles.modalFieldValue}>
+                    {wbs.project.name}
+                    {wbs.project.identifier ? (
+                      <span className={styles.modalProjectId}> · {wbs.project.identifier}</span>
+                    ) : null}
+                  </span>
+                </div>
+              ) : null}
+              {(appliedFilters.dateFrom || appliedFilters.dateTo) ? (
+                <div className={`${styles.modalField} ${styles.modalFieldFull}`}>
+                  <span className={styles.modalFieldLabel}>조회 기간</span>
+                  <span className={styles.modalFieldValue}>
+                    {appliedFilters.dateFrom || "전체"} ~ {appliedFilters.dateTo || "전체"}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+
+            <div className={styles.modalProgressSection}>
+              <div className={styles.modalProgressLabel}>
+                <span className={styles.modalProgressText}>진행률</span>
+                <span className={styles.modalProgressValue}>{selectedTask.progress}%</span>
+              </div>
+              <div className={styles.modalProgressTrack}>
+                <div
+                  className={styles.modalProgressFill}
+                  style={{
+                    width: `${selectedTask.progress}%`,
+                    backgroundColor: selectedTask.barColor,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
