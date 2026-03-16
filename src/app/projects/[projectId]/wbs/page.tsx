@@ -183,7 +183,8 @@ const STATE_GROUP_ACCENT: Record<string, string> = {
 const DISPLAY_ORDER = ["started", "unstarted", "backlog", "completed"] as const;
 const DAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
 const DAY_IN_MS = 1000 * 60 * 60 * 24;
-const DEFAULT_DURATION_DAYS = 7;
+const DEFAULT_DURATION_WORK_DAYS = 5;
+const WORK_DAYS_PER_WEEK = 5;
 const DRAG_SCROLL_SPEED = 2.25;
 const FROZEN_COLUMNS_WIDTH = 404;
 const DETAIL_COLUMNS_WIDTH = 576;
@@ -237,8 +238,84 @@ function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * DAY_IN_MS);
 }
 
-function differenceInDays(start: Date, end: Date): number {
-  return Math.floor((startOfDay(end).getTime() - startOfDay(start).getTime()) / DAY_IN_MS) + 1;
+function isWeekend(date: Date): boolean {
+  return date.getDay() === 0 || date.getDay() === 6;
+}
+
+function moveToNextWorkday(date: Date): Date {
+  let cursor = startOfDay(date);
+
+  while (isWeekend(cursor)) {
+    cursor = addDays(cursor, 1);
+  }
+
+  return cursor;
+}
+
+function moveToPreviousWorkday(date: Date): Date {
+  let cursor = startOfDay(date);
+
+  while (isWeekend(cursor)) {
+    cursor = addDays(cursor, -1);
+  }
+
+  return cursor;
+}
+
+function addBusinessDays(date: Date, amount: number): Date {
+  let cursor = startOfDay(date);
+
+  if (amount === 0) {
+    return isWeekend(cursor) ? moveToNextWorkday(cursor) : cursor;
+  }
+
+  const direction = amount > 0 ? 1 : -1;
+  let remaining = Math.abs(amount);
+
+  while (remaining > 0) {
+    cursor = addDays(cursor, direction);
+    if (!isWeekend(cursor)) {
+      remaining -= 1;
+    }
+  }
+
+  return cursor;
+}
+
+function differenceInBusinessDays(start: Date, end: Date): number {
+  const normalizedStart = moveToNextWorkday(start);
+  const normalizedEnd = moveToPreviousWorkday(end);
+
+  if (normalizedEnd < normalizedStart) {
+    return 1;
+  }
+
+  let count = 0;
+  let cursor = normalizedStart;
+
+  while (cursor <= normalizedEnd) {
+    if (!isWeekend(cursor)) {
+      count += 1;
+    }
+    cursor = addDays(cursor, 1);
+  }
+
+  return Math.max(count, 1);
+}
+
+function getBusinessDaysInRange(start: Date, end: Date): Date[] {
+  const days: Date[] = [];
+  let cursor = startOfDay(start);
+  const normalizedEnd = startOfDay(end);
+
+  while (cursor <= normalizedEnd) {
+    if (!isWeekend(cursor)) {
+      days.push(cursor);
+    }
+    cursor = addDays(cursor, 1);
+  }
+
+  return days;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -322,6 +399,45 @@ function doesRangeOverlap(start: Date, end: Date, rangeStart: Date, rangeEnd: Da
   return start <= rangeEnd && end >= rangeStart;
 }
 
+function buildExportGanttCells(
+  row: PresentationRow,
+  exportBuckets: Array<{ key: string; label: string; start: Date; end: Date }>,
+): string[] {
+  const overlappingIndexes = exportBuckets
+    .map((bucket, index) =>
+      doesRangeOverlap(row.start, row.end, bucket.start, bucket.end) ? index : -1,
+    )
+    .filter((index) => index >= 0);
+
+  if (overlappingIndexes.length === 0) {
+    return exportBuckets.map(() => "");
+  }
+
+  const completedBucketsFloat = (overlappingIndexes.length * row.progress) / 100;
+  const completedBuckets = Math.floor(completedBucketsFloat);
+  const hasPartialBucket = row.progress > 0 && row.progress < 100 && completedBucketsFloat > completedBuckets;
+  let completedCount = 0;
+  let partialPlaced = false;
+
+  return exportBuckets.map((bucket, index) => {
+    if (!overlappingIndexes.includes(index)) {
+      return "";
+    }
+
+    if (completedCount < completedBuckets) {
+      completedCount += 1;
+      return "■";
+    }
+
+    if (hasPartialBucket && !partialPlaced) {
+      partialPlaced = true;
+      return "▨";
+    }
+
+    return "□";
+  });
+}
+
 function getAssigneeLabel(assignees: AssigneeInfo[]): string {
   if (assignees.length === 0) {
     return "미할당";
@@ -373,64 +489,78 @@ function makeToggler(setter: Dispatch<SetStateAction<string[]>>) {
   };
 }
 
-function buildMonthMarkers(start: Date, totalDays: number): TimelineMarker[] {
+function buildMonthMarkers(workdays: Date[]): TimelineMarker[] {
   const markers: TimelineMarker[] = [];
-  const end = addDays(start, totalDays - 1);
-  let cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+  const totalDays = Math.max(workdays.length, 1);
+  let cursor = 0;
 
-  while (cursor <= end) {
-    const segmentStart = cursor < start ? start : cursor;
-    const nextMonth = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
-    const segmentEnd = addDays(nextMonth, -1) > end ? end : addDays(nextMonth, -1);
-    const offset = Math.floor((segmentStart.getTime() - start.getTime()) / DAY_IN_MS);
-    const width = differenceInDays(segmentStart, segmentEnd);
+  while (cursor < workdays.length) {
+    const segmentStart = workdays[cursor];
+    let segmentEnd = segmentStart;
+    let width = 1;
+
+    while (
+      cursor + width < workdays.length &&
+      workdays[cursor + width].getMonth() === segmentStart.getMonth() &&
+      workdays[cursor + width].getFullYear() === segmentStart.getFullYear()
+    ) {
+      segmentEnd = workdays[cursor + width];
+      width += 1;
+    }
 
     markers.push({
-      key: `month-${cursor.getFullYear()}-${cursor.getMonth()}`,
+      key: `month-${segmentStart.getFullYear()}-${segmentStart.getMonth()}`,
       label: `${segmentStart.getFullYear()}년 ${segmentStart.getMonth() + 1}월`,
       start: segmentStart,
       end: segmentEnd,
-      leftPct: (offset / totalDays) * 100,
+      leftPct: (cursor / totalDays) * 100,
       widthPct: (width / totalDays) * 100,
     });
 
-    cursor = nextMonth;
+    cursor += width;
   }
 
   return markers;
 }
 
-function buildWeekMarkers(start: Date, totalDays: number): TimelineMarker[] {
+function buildWeekMarkers(workdays: Date[]): TimelineMarker[] {
   const markers: TimelineMarker[] = [];
-  const end = addDays(start, totalDays - 1);
-  let cursor = start;
+  const totalDays = Math.max(workdays.length, 1);
+  let cursor = 0;
   let weekIndexInMonth = 1;
 
-  while (cursor <= end) {
-    const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
-    const segmentEndCandidate = addDays(cursor, 6);
-    const segmentEnd = [segmentEndCandidate, monthEnd, end].reduce((currentMin, candidate) =>
-      candidate < currentMin ? candidate : currentMin,
-    );
-    const offset = Math.floor((cursor.getTime() - start.getTime()) / DAY_IN_MS);
-    const width = differenceInDays(cursor, segmentEnd);
+  while (cursor < workdays.length) {
+    const segmentStart = workdays[cursor];
+    let segmentEnd = segmentStart;
+    let width = 1;
+
+    while (
+      cursor + width < workdays.length &&
+      width < WORK_DAYS_PER_WEEK &&
+      workdays[cursor + width].getMonth() === segmentStart.getMonth() &&
+      workdays[cursor + width].getFullYear() === segmentStart.getFullYear()
+    ) {
+      segmentEnd = workdays[cursor + width];
+      width += 1;
+    }
 
     markers.push({
-      key: `week-${cursor.getFullYear()}-${cursor.getMonth()}-${weekIndexInMonth}`,
+      key: `week-${segmentStart.getFullYear()}-${segmentStart.getMonth()}-${weekIndexInMonth}`,
       label:
-        cursor.getMonth() === segmentEnd.getMonth()
-          ? `${cursor.getMonth() + 1}/${cursor.getDate()}-${segmentEnd.getDate()}`
-          : `${cursor.getMonth() + 1}/${cursor.getDate()}-${segmentEnd.getMonth() + 1}/${segmentEnd.getDate()}`,
+        segmentStart.getMonth() === segmentEnd.getMonth()
+          ? `${segmentStart.getMonth() + 1}/${segmentStart.getDate()}-${segmentEnd.getDate()}`
+          : `${segmentStart.getMonth() + 1}/${segmentStart.getDate()}-${segmentEnd.getMonth() + 1}/${segmentEnd.getDate()}`,
       compactLabel: `${weekIndexInMonth}주`,
-      start: cursor,
+      start: segmentStart,
       end: segmentEnd,
-      leftPct: (offset / totalDays) * 100,
+      leftPct: (cursor / totalDays) * 100,
       widthPct: (width / totalDays) * 100,
     });
 
-    const nextCursor = addDays(segmentEnd, 1);
-    weekIndexInMonth = nextCursor.getMonth() === cursor.getMonth() ? weekIndexInMonth + 1 : 1;
-    cursor = nextCursor;
+    const nextStart = workdays[cursor + width];
+    weekIndexInMonth =
+      nextStart && nextStart.getMonth() === segmentStart.getMonth() ? weekIndexInMonth + 1 : 1;
+    cursor += width;
   }
 
   return markers;
@@ -510,6 +640,73 @@ function snapBarToWeekBuckets(
   };
 }
 
+function uniformizeMarkerWidths(markers: TimelineMarker[]): TimelineMarker[] {
+  if (markers.length === 0) {
+    return markers;
+  }
+
+  const uniformWidth = 100 / markers.length;
+
+  return markers.map((marker, index) => ({
+    ...marker,
+    leftPct: index * uniformWidth,
+    widthPct: uniformWidth,
+  }));
+}
+
+function buildUniformMonthMarkers(weekMarkers: TimelineMarker[]): TimelineMarker[] {
+  const markers: TimelineMarker[] = [];
+  let cursor = 0;
+
+  while (cursor < weekMarkers.length) {
+    const segmentStart = weekMarkers[cursor];
+    let segmentEnd = segmentStart;
+
+    while (
+      cursor + 1 < weekMarkers.length &&
+      weekMarkers[cursor + 1].start.getMonth() === segmentStart.start.getMonth() &&
+      weekMarkers[cursor + 1].start.getFullYear() === segmentStart.start.getFullYear()
+    ) {
+      cursor += 1;
+      segmentEnd = weekMarkers[cursor];
+    }
+
+    markers.push({
+      key: `uniform-month-${segmentStart.start.getFullYear()}-${segmentStart.start.getMonth()}`,
+      label: `${segmentStart.start.getFullYear()}년 ${segmentStart.start.getMonth() + 1}월`,
+      start: segmentStart.start,
+      end: segmentEnd.end,
+      leftPct: segmentStart.leftPct,
+      widthPct: segmentEnd.leftPct + segmentEnd.widthPct - segmentStart.leftPct,
+    });
+
+    cursor += 1;
+  }
+
+  return markers;
+}
+
+function recomputeTodayPctUniform(today: Date, uniformWeekMarkers: TimelineMarker[]): number | null {
+  if (uniformWeekMarkers.length === 0) {
+    return null;
+  }
+
+  const normalizedToday = isWeekend(today) ? moveToPreviousWorkday(today) : startOfDay(today);
+  const containingWeek = uniformWeekMarkers.find(
+    (marker) => normalizedToday >= marker.start && normalizedToday <= marker.end,
+  );
+
+  if (!containingWeek) {
+    return null;
+  }
+
+  const segmentSpan = Math.max(differenceInBusinessDays(containingWeek.start, containingWeek.end), 1);
+  const segmentOffset = Math.max(differenceInBusinessDays(containingWeek.start, normalizedToday) - 1, 0);
+  const ratio = segmentSpan <= 1 ? 0.5 : segmentOffset / (segmentSpan - 1);
+
+  return clamp(containingWeek.leftPct + containingWeek.widthPct * ratio, 0, 100);
+}
+
 function buildTimelineModel(rows: WbsRow[]): TimelineModel {
   const today = startOfDay(new Date());
   const taskRows: Array<Omit<TaskPresentationRow, "leftPct" | "widthPct">> = [];
@@ -524,15 +721,19 @@ function buildTimelineModel(rows: WbsRow[]): TimelineModel {
     const phaseCode = `${groupIndex + 1}`;
 
     for (const [taskIndex, row] of entry.rows.entries()) {
-      const start = startOfDay(
+      const rawStart = startOfDay(
         parseDateValue(row.start_date) ?? parseDateValue(row.created_at) ?? today,
       );
       const dueCandidate =
         parseDateValue(row.target_date) ??
         parseDateValue(row.due_date) ??
         parseDateValue(row.completed_at);
-      const end = startOfDay(dueCandidate ?? addDays(start, DEFAULT_DURATION_DAYS - 1));
-      const safeEnd = end < start ? start : end;
+      const rawEnd = startOfDay(
+        dueCandidate ?? addBusinessDays(rawStart, DEFAULT_DURATION_WORK_DAYS - 1),
+      );
+      const normalizedStart = moveToNextWorkday(rawStart);
+      const normalizedEndCandidate = moveToPreviousWorkday(rawEnd);
+      const safeEnd = normalizedEndCandidate < normalizedStart ? normalizedStart : normalizedEndCandidate;
 
       taskRows.push({
         kind: "task",
@@ -541,9 +742,9 @@ function buildTimelineModel(rows: WbsRow[]): TimelineModel {
         wbsCode: hasHierarchy ? (codes.get(row.id) ?? `${phaseCode}.${taskIndex + 1}`) : `${phaseCode}.${taskIndex + 1}`,
         title: row.name,
         owner: getAssigneeLabel(row.assignees),
-        start,
+        start: normalizedStart,
         end: safeEnd,
-        durationDays: differenceInDays(start, safeEnd),
+        durationDays: differenceInBusinessDays(normalizedStart, safeEnd),
         progress: getProgressPercent(entry.group),
         priority: row.priority,
         priorityLabel: PRIORITY_LABELS[row.priority] ?? row.priority,
@@ -558,19 +759,21 @@ function buildTimelineModel(rows: WbsRow[]): TimelineModel {
     : today;
   const maxDate = taskRows.length > 0
     ? new Date(Math.max(...taskRows.map((row) => row.end.getTime())))
-    : addDays(today, 13);
+    : addBusinessDays(today, 9);
 
-  const timelineStart = addDays(startOfDay(minDate), -1);
-  const timelineEnd = addDays(startOfDay(maxDate), 1);
-  const totalDays = Math.max(differenceInDays(timelineStart, timelineEnd), 1);
+  const timelineStart = addBusinessDays(moveToNextWorkday(minDate), -1);
+  const timelineEnd = addBusinessDays(moveToPreviousWorkday(maxDate), 1);
+  const workdays = getBusinessDaysInRange(timelineStart, timelineEnd);
+  const totalDays = Math.max(workdays.length, 1);
+  const workdayIndex = new Map(workdays.map((date, index) => [formatDateInputValue(date), index]));
 
   const toLeftPct = (date: Date) => {
-    const offset = Math.floor((startOfDay(date).getTime() - timelineStart.getTime()) / DAY_IN_MS);
+    const offset = workdayIndex.get(formatDateInputValue(moveToNextWorkday(date))) ?? 0;
     return clamp((offset / totalDays) * 100, 0, 100);
   };
 
   const toWidthPct = (start: Date, end: Date) => {
-    const widthDays = Math.max(differenceInDays(start, end), 1);
+    const widthDays = Math.max(differenceInBusinessDays(start, end), 1);
     return Math.max((widthDays / totalDays) * 100, 1.6);
   };
 
@@ -599,7 +802,7 @@ function buildTimelineModel(rows: WbsRow[]): TimelineModel {
       owner: `${tasks.length}개 작업`,
       start: phaseStart,
       end: phaseEnd,
-      durationDays: differenceInDays(phaseStart, phaseEnd),
+      durationDays: differenceInBusinessDays(phaseStart, phaseEnd),
       progress: phaseProgress,
       leftPct: toLeftPct(phaseStart),
       widthPct: toWidthPct(phaseStart, phaseEnd),
@@ -616,23 +819,21 @@ function buildTimelineModel(rows: WbsRow[]): TimelineModel {
     }
   }
 
-  const days = Array.from({ length: totalDays }, (_, index) => {
-    const date = addDays(timelineStart, index);
+  const days = workdays.map((date) => ({
+    key: `day-${formatDateInputValue(date)}`,
+    date,
+    label: DAY_LABELS[date.getDay()],
+    weekend: false,
+  }));
 
-    return {
-      key: `day-${formatDateInputValue(date)}`,
-      date,
-      label: DAY_LABELS[date.getDay()],
-      weekend: date.getDay() === 0 || date.getDay() === 6,
-    };
-  });
+  const monthMarkers = buildMonthMarkers(workdays);
+  const weekMarkers = buildWeekMarkers(workdays);
 
-  const monthMarkers = buildMonthMarkers(timelineStart, totalDays);
-  const weekMarkers = buildWeekMarkers(timelineStart, totalDays);
-
-  const todayPct = today >= timelineStart && today <= timelineEnd
-    ? clamp((Math.floor((today.getTime() - timelineStart.getTime()) / DAY_IN_MS) / totalDays) * 100, 0, 100)
-    : null;
+  const todayWorkday = isWeekend(today) ? moveToPreviousWorkday(today) : today;
+  const todayIndex = workdayIndex.get(formatDateInputValue(todayWorkday));
+  const todayPct = todayIndex === undefined
+    ? null
+    : clamp((todayIndex / totalDays) * 100, 0, 100);
 
   return {
     monthMarkers,
@@ -791,6 +992,18 @@ export default function WbsPage() {
     () => buildTimelineModel(wbs?.rows ?? []),
     [wbs],
   );
+  const effectiveWeekMarkers = useMemo(
+    () => (timelineScale === "month" ? uniformizeMarkerWidths(timeline.weekMarkers) : timeline.weekMarkers),
+    [timelineScale, timeline.weekMarkers],
+  );
+  const effectiveMonthMarkers = useMemo(
+    () => (timelineScale === "month" ? buildUniformMonthMarkers(effectiveWeekMarkers) : timeline.monthMarkers),
+    [timelineScale, timeline.monthMarkers, effectiveWeekMarkers],
+  );
+  const effectiveTodayPct = useMemo(
+    () => (timelineScale === "month" ? recomputeTodayPctUniform(new Date(), effectiveWeekMarkers) : timeline.todayPct),
+    [timelineScale, timeline.todayPct, effectiveWeekMarkers],
+  );
 
   const activeFilterCount =
     selectedStateGroups.length +
@@ -814,7 +1027,7 @@ export default function WbsPage() {
   const timelineGridDivisions =
     timelineScale === "week"
       ? Math.max(timeline.totalDays, 1)
-      : Math.max(timeline.weekMarkers.length, 1);
+      : Math.max(effectiveWeekMarkers.length, 1);
   const showDayLabels = timelineScale === "week";
   const timelineGridStyle: CSSProperties = {
     backgroundSize: `${100 / timelineGridDivisions}% 100%`,
@@ -838,13 +1051,13 @@ export default function WbsPage() {
   };
 
   const scrollToToday = () => {
-    if (!boardScrollerRef.current || timeline.todayPct === null) {
+    if (!boardScrollerRef.current || effectiveTodayPct === null) {
       return;
     }
 
     const scroller = boardScrollerRef.current;
     const targetLeft =
-      DETAIL_COLUMNS_WIDTH + (timelineWidth * timeline.todayPct) / 100 - scroller.clientWidth * 0.4;
+      DETAIL_COLUMNS_WIDTH + (timelineWidth * effectiveTodayPct) / 100 - scroller.clientWidth * 0.4;
 
     scroller.scrollTo({ left: Math.max(targetLeft, 0), behavior: "smooth" });
   };
@@ -856,7 +1069,7 @@ export default function WbsPage() {
 
     const exportBuckets = buildExportBucketHeaders(
       timelineScale,
-      timeline.weekMarkers,
+      effectiveWeekMarkers,
       timeline.days,
     );
 
@@ -866,6 +1079,7 @@ export default function WbsPage() {
       ["내보낸 시각", formatKoreanFullDate(new Date())],
       ["조회 기간", `${appliedFilters.dateFrom || "전체"} ~ ${appliedFilters.dateTo || "전체"}`],
       ["타임라인 보기", timelineScale === "month" ? "월 단위" : "주 단위"],
+      ["간트 표기", "■ 완료된 진행 구간 / ▨ 진행중 구간 / □ 남은 진행 구간"],
       [],
       [
         "WBS",
@@ -877,16 +1091,14 @@ export default function WbsPage() {
         "종료일",
         "기간(일)",
         "진행률(%)",
+        "완료 여부",
         "우선순위",
-        "난이도",
-        ...exportBuckets.map((bucket) => `간트 ${bucket.label}`),
+        ...exportBuckets.map((bucket) => bucket.label),
       ],
     ];
 
     for (const row of timeline.rows) {
-      const ganttCells = exportBuckets.map((bucket) =>
-        doesRangeOverlap(row.start, row.end, bucket.start, bucket.end) ? "■" : "",
-      );
+      const ganttCells = buildExportGanttCells(row, exportBuckets);
 
       rows.push([
         row.wbsCode,
@@ -898,8 +1110,8 @@ export default function WbsPage() {
         formatDateForExport(row.end),
         row.durationDays,
         row.progress,
+        row.kind === "task" ? (row.group === "completed" ? "완료" : "미완료") : "",
         row.kind === "task" ? row.priorityLabel : "",
-        row.kind === "task" ? row.difficultyLabel : "",
         ...ganttCells,
       ]);
     }
@@ -931,18 +1143,18 @@ export default function WbsPage() {
       error ||
       !wbs ||
       !boardScrollerRef.current ||
-      timeline.todayPct === null
+      effectiveTodayPct === null
     ) {
       return;
     }
 
     const scroller = boardScrollerRef.current;
     const targetLeft =
-      DETAIL_COLUMNS_WIDTH + (timelineWidth * timeline.todayPct) / 100 - scroller.clientWidth * 0.4;
+      DETAIL_COLUMNS_WIDTH + (timelineWidth * effectiveTodayPct) / 100 - scroller.clientWidth * 0.4;
 
     scroller.scrollLeft = Math.max(targetLeft, 0);
     hasAutoScrolledToTodayRef.current = true;
-  }, [error, loading, projectId, timeline.todayPct, timelineWidth, wbs]);
+  }, [effectiveTodayPct, error, loading, projectId, timelineWidth, wbs]);
 
   const stopTimelineDrag = () => {
     dragStateRef.current = null;
@@ -1550,7 +1762,7 @@ export default function WbsPage() {
                       className={`${styles.timelineHeaderStack} ${showDayLabels ? "" : styles.timelineHeaderStackCompact}`}
                     >
                       <div className={styles.monthBandRow}>
-                        {timeline.monthMarkers.map((marker) => (
+                        {effectiveMonthMarkers.map((marker) => (
                           <span
                             key={marker.key}
                             className={styles.monthBand}
@@ -1561,7 +1773,7 @@ export default function WbsPage() {
                         ))}
                       </div>
                       <div className={styles.weekBandRow}>
-                        {timeline.weekMarkers.map((marker) => (
+                        {effectiveWeekMarkers.map((marker) => (
                           <span
                             key={marker.key}
                             className={styles.weekBand}
@@ -1582,13 +1794,13 @@ export default function WbsPage() {
                               {day.label}
                             </span>
                           ))}
-                          {timeline.todayPct !== null ? (
-                            <span className={styles.todayLine} style={{ left: `${timeline.todayPct}%` }} />
+                          {effectiveTodayPct !== null ? (
+                            <span className={styles.todayLine} style={{ left: `${effectiveTodayPct}%` }} />
                           ) : null}
                         </div>
                       ) : null}
-                      {!showDayLabels && timeline.todayPct !== null ? (
-                        <span className={styles.todayLine} style={{ left: `${timeline.todayPct}%` }} />
+                      {!showDayLabels && effectiveTodayPct !== null ? (
+                        <span className={styles.todayLine} style={{ left: `${effectiveTodayPct}%` }} />
                       ) : null}
                     </div>
                   </div>
@@ -1601,7 +1813,7 @@ export default function WbsPage() {
                         ? snapBarToWeekBuckets(
                             row.start,
                             row.end,
-                            timeline.weekMarkers,
+                            effectiveWeekMarkers,
                             row.leftPct,
                             row.widthPct,
                           )
@@ -1635,26 +1847,18 @@ export default function WbsPage() {
                             </div>
                             <span className={styles.progressValue}>{row.progress}%</span>
                           </div>
-                          {row.kind === "task" ? (
-                            <div className={styles.progressBadges}>
-                              <span className={`${styles.priorityBadge} ${getPriorityClassName(row.priority)}`}>
-                                {row.priorityLabel}
-                              </span>
-                              <span className={styles.difficultyBadge}>{row.difficultyLabel}</span>
-                            </div>
-                          ) : null}
                         </div>
                         <div className={styles.timelineCell}>
                           <div className={styles.timelineTrack} style={timelineGridStyle}>
-                            {timeline.weekMarkers.map((marker) => (
+                            {effectiveWeekMarkers.map((marker) => (
                               <span
                                 key={marker.key}
                                 className={styles.weekDivider}
                                 style={{ left: `${marker.leftPct}%` }}
                               />
                             ))}
-                            {timeline.todayPct !== null ? (
-                              <span className={styles.todayLine} style={{ left: `${timeline.todayPct}%` }} />
+                            {effectiveTodayPct !== null ? (
+                              <span className={styles.todayLine} style={{ left: `${effectiveTodayPct}%` }} />
                             ) : null}
                             <div className={row.kind === "phase" ? styles.phaseBar : styles.taskBar} style={barStyle}>
                               <div className={styles.barFill} style={{ width: `${row.progress}%` }} />

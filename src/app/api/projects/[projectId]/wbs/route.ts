@@ -16,6 +16,7 @@ import {
 const LABEL_WEIGHT: Record<string, number> = { 하: 1, 중: 3, 상: 5 };
 const DEFAULT_WEIGHT = 1;
 const DEFAULT_LABEL = "하";
+const DEFAULT_DURATION_WORK_DAYS = 5;
 
 const FALLBACK_ESTIMATE_MAPPING: Record<string, string> = {
   "112f7d57-3364-4ae3-b57c-228c202b89e2": "난이도:하",
@@ -25,7 +26,6 @@ const FALLBACK_ESTIMATE_MAPPING: Record<string, string> = {
 
 type DifficultyMapping = Map<string, { label: string; weight: number }>;
 const DAY_IN_MS = 1000 * 60 * 60 * 24;
-const DEFAULT_DURATION_DAYS = 7;
 
 function parseDifficultyLabel(raw: string): string {
   const idx = raw.lastIndexOf(":");
@@ -75,6 +75,53 @@ function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * DAY_IN_MS);
 }
 
+function isWeekend(date: Date): boolean {
+  return date.getDay() === 0 || date.getDay() === 6;
+}
+
+function addBusinessDays(date: Date, amount: number): Date {
+  let cursor = startOfDay(date);
+
+  if (amount === 0) {
+    while (isWeekend(cursor)) {
+      cursor = addDays(cursor, 1);
+    }
+    return cursor;
+  }
+
+  let remaining = Math.abs(amount);
+  const direction = amount > 0 ? 1 : -1;
+
+  while (remaining > 0) {
+    cursor = addDays(cursor, direction);
+    if (!isWeekend(cursor)) {
+      remaining -= 1;
+    }
+  }
+
+  return cursor;
+}
+
+function moveToNextWorkday(date: Date): Date {
+  let cursor = startOfDay(date);
+
+  while (isWeekend(cursor)) {
+    cursor = addDays(cursor, 1);
+  }
+
+  return cursor;
+}
+
+function moveToPreviousWorkday(date: Date): Date {
+  let cursor = startOfDay(date);
+
+  while (isWeekend(cursor)) {
+    cursor = addDays(cursor, -1);
+  }
+
+  return cursor;
+}
+
 function formatDateOnly(date: Date): string {
   const year = date.getFullYear();
   const month = `${date.getMonth() + 1}`.padStart(2, "0");
@@ -85,13 +132,14 @@ function formatDateOnly(date: Date): string {
 
 function resolveWorkItemDates(workItem: PlaneWorkItem): { start: Date; end: Date } {
   const createdAt = parseDateValue(workItem.created_at) ?? new Date();
-  const start = startOfDay(parseDateValue(workItem.start_date) ?? createdAt);
+  const rawStart = startOfDay(parseDateValue(workItem.start_date) ?? createdAt);
+  const start = moveToNextWorkday(rawStart);
   const rawEnd =
     parseDateValue(workItem.target_date) ??
     parseDateValue(workItem.due_date) ??
     parseDateValue(workItem.completed_at);
-  const fallbackEnd = addDays(start, DEFAULT_DURATION_DAYS - 1);
-  const end = startOfDay(rawEnd ?? fallbackEnd);
+  const fallbackEnd = addBusinessDays(start, DEFAULT_DURATION_WORK_DAYS - 1);
+  const end = moveToPreviousWorkday(startOfDay(rawEnd ?? fallbackEnd));
 
   if (end < start) {
     return { start, end: start };
