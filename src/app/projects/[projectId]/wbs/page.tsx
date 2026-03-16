@@ -186,8 +186,7 @@ const DAY_IN_MS = 1000 * 60 * 60 * 24;
 const DEFAULT_DURATION_WORK_DAYS = 5;
 const WORK_DAYS_PER_WEEK = 5;
 const DRAG_SCROLL_SPEED = 2.25;
-const FROZEN_COLUMNS_WIDTH = 404;
-const DETAIL_COLUMNS_WIDTH = 576;
+const DETAIL_COLUMNS_WIDTH = 0;
 const EMPTY_FILTERS: AppliedFilters = {
   stateGroups: [],
   members: [],
@@ -1044,10 +1043,10 @@ export default function WbsPage() {
     Math.round(timeline.days.length * baseTimelineWidth * timelineZoom),
   );
   const frozenRowGridStyle: CSSProperties = {
-    gridTemplateColumns: `84px ${FROZEN_COLUMNS_WIDTH - 84}px`,
+    gridTemplateColumns: `52px 200px 72px 76px 66px 66px 46px 74px 88px`,
   };
   const scrollRowGridStyle: CSSProperties = {
-    gridTemplateColumns: `140px 92px 92px 82px 170px ${timelineWidth}px`,
+    gridTemplateColumns: `${timelineWidth}px`,
   };
 
   const scrollToToday = () => {
@@ -1698,8 +1697,15 @@ export default function WbsPage() {
                 className={`${styles.frozenHeader} ${styles.headerGridRow} ${!showDayLabels ? styles.headerRowCompact : ""}`}
                 style={frozenRowGridStyle}
               >
-                <div className={`${styles.headerCell} ${styles.frozenCodeHeader}`}>WBS</div>
-                <div className={`${styles.headerCell} ${styles.frozenTitleHeader}`}>작업명</div>
+                <div className={`${styles.frozenCell} ${styles.frozenCodeHeader} ${styles.frozenHeaderCell}`}>WBS</div>
+                <div className={`${styles.frozenCell} ${styles.frozenTitleHeader} ${styles.frozenHeaderCell}`}>작업명</div>
+                <div className={`${styles.frozenCell} ${styles.frozenHeaderCell}`}>상태</div>
+                <div className={`${styles.frozenCell} ${styles.frozenHeaderCell}`}>담당자</div>
+                <div className={`${styles.frozenCell} ${styles.frozenHeaderCell}`}>시작일</div>
+                <div className={`${styles.frozenCell} ${styles.frozenHeaderCell}`}>종료일</div>
+                <div className={`${styles.frozenCell} ${styles.frozenHeaderCell}`}>기간</div>
+                <div className={`${styles.frozenCell} ${styles.frozenHeaderCell}`}>우선순위</div>
+                <div className={`${styles.frozenCell} ${styles.frozenHeaderCell}`}>진행률</div>
               </div>
               <div className={styles.frozenBody}>
                 {timeline.rows.map((row, rowIndex) => (
@@ -1709,13 +1715,17 @@ export default function WbsPage() {
                       frozenRowRefs.current[rowIndex] = element;
                     }}
                     className={`${styles.frozenRow} ${row.kind === "phase" ? styles.phaseRow : styles.taskRow}`}
-                    style={frozenRowGridStyle}
+                    style={
+                      row.kind === "phase"
+                        ? { ...frozenRowGridStyle, boxShadow: `inset 3px 0 0 ${row.barColor}` }
+                        : frozenRowGridStyle
+                    }
                   >
                     <div className={`${styles.frozenCell} ${styles.frozenCodeCell}`}>{row.wbsCode}</div>
                     <div className={`${styles.frozenCell} ${styles.frozenTitleCell}`}>
                       {row.kind === "phase" ? (
                         <>
-                          <span className={styles.phaseTitle}>{row.title}</span>
+                          <span className={styles.phaseTitle}>{STATE_GROUP_LABELS[row.group] ?? row.group}</span>
                           <span className={styles.phaseTaskCount}>{row.taskCount}건</span>
                         </>
                       ) : (
@@ -1731,6 +1741,42 @@ export default function WbsPage() {
                           <span className={styles.taskTitle}>{row.title}</span>
                         </button>
                       )}
+                    </div>
+                    <div className={`${styles.frozenCell} ${styles.frozenStateCell}`}>
+                      <span
+                        className={styles.stateGroupBadge}
+                        style={{
+                          color: row.barColor,
+                          borderColor: `${row.barColor}55`,
+                          background: `${row.barColor}18`,
+                        }}
+                      >
+                        {STATE_GROUP_LABELS[row.group] ?? row.group}
+                      </span>
+                    </div>
+                    <div className={`${styles.frozenCell} ${styles.frozenOwnerCell}`}>{row.owner}</div>
+                    <div className={`${styles.frozenCell} ${styles.frozenDateCell}`}>{formatShortDate(row.start)}</div>
+                    <div className={`${styles.frozenCell} ${styles.frozenDateCell}`}>{formatShortDate(row.end)}</div>
+                    <div className={`${styles.frozenCell} ${styles.frozenDurationCell}`}>
+                      {row.durationDays}<span className={styles.durationUnit}>d</span>
+                    </div>
+                    <div className={`${styles.frozenCell} ${styles.frozenPriorityCell}`}>
+                      {row.kind === "task" ? (
+                        <span className={`${styles.priorityBadge} ${getPriorityClassName(row.priority)}`}>
+                          {row.priorityLabel}
+                        </span>
+                      ) : (
+                        <span className={styles.phasePriorityDash}>—</span>
+                      )}
+                    </div>
+                    <div className={`${styles.frozenCell} ${styles.frozenProgressCell}`}>
+                      <div className={styles.progressTrack}>
+                        <div
+                          className={styles.progressFill}
+                          style={{ width: `${row.progress}%`, backgroundColor: row.barColor }}
+                        />
+                      </div>
+                      <span className={styles.progressValue}>{row.progress}%</span>
                     </div>
                   </div>
                 ))}
@@ -1752,11 +1798,6 @@ export default function WbsPage() {
                   className={`${styles.scrollHeader} ${styles.headerGridRow} ${!showDayLabels ? styles.headerRowCompact : ""}`}
                   style={scrollRowGridStyle}
                 >
-                  <div className={styles.headerCell}>담당자</div>
-                  <div className={styles.headerCell}>시작일</div>
-                  <div className={styles.headerCell}>종료일</div>
-                  <div className={styles.headerCell}>기간</div>
-                  <div className={styles.headerCell}>진행률</div>
                   <div className={`${styles.headerCell} ${styles.timelineHeaderCell}`}>
                     <div
                       className={`${styles.timelineHeaderStack} ${showDayLabels ? "" : styles.timelineHeaderStackCompact}`}
@@ -1833,21 +1874,6 @@ export default function WbsPage() {
                         className={`${styles.scrollRow} ${row.kind === "phase" ? styles.phaseRow : styles.taskRow}`}
                         style={scrollRowGridStyle}
                       >
-                        <div className={`${styles.cell} ${styles.cellOwner}`}>{row.owner}</div>
-                        <div className={`${styles.cell} ${styles.cellDate}`}>{formatShortDate(row.start)}</div>
-                        <div className={`${styles.cell} ${styles.cellDate}`}>{formatShortDate(row.end)}</div>
-                        <div className={`${styles.cell} ${styles.cellDuration}`}>{row.durationDays}일</div>
-                        <div className={`${styles.cell} ${styles.cellProgress}`}>
-                          <div className={styles.progressMeta}>
-                            <div className={styles.progressTrack}>
-                              <div
-                                className={styles.progressFill}
-                                style={{ width: `${row.progress}%`, backgroundColor: row.barColor }}
-                              />
-                            </div>
-                            <span className={styles.progressValue}>{row.progress}%</span>
-                          </div>
-                        </div>
                         <div className={styles.timelineCell}>
                           <div className={styles.timelineTrack} style={timelineGridStyle}>
                             {effectiveWeekMarkers.map((marker) => (

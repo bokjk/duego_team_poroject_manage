@@ -362,82 +362,19 @@
   font-weight: 600;
 }
 
+/* ============================================================
+   Board section & toolbar
+   ============================================================ */
+
 .boardSection {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  width: 100vw;
-  max-width: 100vw;
-  margin-left: calc(50% - 50vw);
-  margin-right: calc(50% - 50vw);
+  gap: 10px;
+  width: 100%;
+  max-width: none;
+  margin-left: 0;
+  margin-right: 0;
   padding-inline: clamp(16px, 3vw, 32px);
-}
-
-.ganttShell {
-  display: flex;
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(15, 23, 42, 0.62);
-  box-shadow: 0 12px 40px -24px rgba(15, 23, 42, 0.85);
-  overflow: hidden;
-}
-
-.frozenPane {
-  flex: 0 0 404px;
-  width: 404px;
-  background: #111827;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
-  position: relative;
-  z-index: 2;
-}
-
-.frozenHeader,
-.frozenRow {
-  display: grid;
-  align-items: stretch;
-}
-
-.frozenBody,
-.scrollBody {
-  display: flex;
-  flex-direction: column;
-}
-
-.frozenCell {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  border-right: 1px solid rgba(255, 255, 255, 0.05);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-  overflow: hidden;
-}
-
-.frozenCodeHeader,
-.frozenCodeCell {
-  justify-content: center;
-}
-
-.frozenTitleHeader,
-.frozenTitleCell {
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.frozenTitleCell {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-}
-
-.scrollBoard {
-  min-width: max-content;
-}
-
-.scrollHeader,
-.scrollRow {
-  display: grid;
-  align-items: stretch;
 }
 
 .boardTitleRow {
@@ -525,6 +462,219 @@
   color: #fff;
 }
 
+/* ============================================================
+   Gantt shell — side-by-side frozen + scroll
+   ============================================================ */
+
+.ganttShell {
+  display: flex;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(13, 20, 36, 0.78);
+  box-shadow: 0 8px 32px -16px rgba(10, 18, 34, 0.9);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* ============================================================
+   Frozen pane — wide 9-column metadata table
+   ============================================================ */
+
+.frozenPane {
+  flex: 0 0 740px;
+  width: 740px;
+  min-width: 740px;
+  background: #0e1520;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  position: relative;
+  z-index: 2;
+}
+
+.frozenHeader,
+.frozenRow {
+  display: grid;
+  align-items: stretch;
+}
+
+.frozenBody,
+.scrollBody {
+  display: flex;
+  flex-direction: column;
+}
+
+.frozenCell {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+  font-size: 11.5px;
+  min-height: 32px;
+}
+
+.frozenHeaderCell {
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  min-height: 40px;
+  align-items: center;
+}
+
+.frozenCodeHeader,
+.frozenCodeCell {
+  justify-content: center;
+}
+
+.frozenTitleHeader,
+.frozenTitleCell {
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.frozenTitleCell {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 1px;
+}
+
+.frozenStateCell {
+  justify-content: flex-start;
+}
+
+.frozenOwnerCell {
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.frozenDateCell {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  justify-content: center;
+}
+
+.frozenDurationCell {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.durationUnit {
+  color: var(--text-secondary);
+  font-size: 10px;
+  margin-left: 1px;
+  opacity: 0.7;
+}
+
+.frozenPriorityCell {
+  justify-content: flex-start;
+}
+
+.frozenProgressCell {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  overflow: hidden;
+}
+
+.frozenProgressCell .progressTrack {
+  flex: 1;
+  min-width: 28px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.frozenProgressCell .progressFill {
+  height: 100%;
+  border-radius: 999px;
+}
+
+.frozenProgressCell .progressValue {
+  width: 28px;
+  text-align: right;
+  font-size: 10.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   Row styles — dense schedule rows
+   ============================================================ */
+
+.phaseRow {
+  --sticky-bg: #14203a;
+  background: rgba(255, 255, 255, 0.032);
+  min-height: 36px;
+}
+
+.taskRow {
+  --sticky-bg: #0e1520;
+  min-height: 32px;
+}
+
+.taskRow:nth-child(even) {
+  --sticky-bg: #101926;
+  background: rgba(255, 255, 255, 0.011);
+}
+
+/* ============================================================
+   Header rows
+   ============================================================ */
+
+.headerGridRow {
+  --sticky-bg: #182131;
+  background: rgba(255, 255, 255, 0.025);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.headerCell {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  min-height: 40px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.headerRowCompact .headerCell {
+  min-height: 40px;
+}
+
+/* ============================================================
+   Scroll board
+   ============================================================ */
+
+.scrollBoard {
+  min-width: max-content;
+}
+
+.scrollHeader,
+.scrollRow {
+  display: grid;
+  align-items: stretch;
+}
+
 .boardScroller {
   overflow-x: auto;
   flex: 1 1 auto;
@@ -541,7 +691,7 @@
 }
 
 .board {
-  min-width: 1360px;
+  min-width: 760px;
 }
 
 .gridRow {
@@ -549,28 +699,9 @@
   align-items: stretch;
 }
 
-.headerRowCompact .headerCell {
-  min-height: 56px;
-}
-
-.headerGridRow {
-  --sticky-bg: #182131;
-  background: rgba(255, 255, 255, 0.03);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.headerCell {
-  display: flex;
-  align-items: center;
-  padding: 14px 12px;
-  min-height: 84px;
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  border-right: 1px solid rgba(255, 255, 255, 0.05);
-}
+/* ============================================================
+   Timeline header
+   ============================================================ */
 
 .timelineHeaderCell {
   padding: 0;
@@ -581,17 +712,17 @@
 
 .timelineHeaderStack {
   position: relative;
-  height: 84px;
+  height: 56px;
 }
 
 .timelineHeaderStackCompact {
-  height: 56px;
+  height: 40px;
 }
 
 .monthBandRow,
 .weekBandRow {
   position: relative;
-  height: 28px;
+  height: 20px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -605,19 +736,19 @@
   justify-content: center;
   overflow: hidden;
   white-space: nowrap;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
 }
 
 .monthBand {
-  background: rgba(99, 102, 241, 0.18);
+  background: rgba(99, 102, 241, 0.14);
   color: #c7d2fe;
 }
 
 .weekBand {
-  background: rgba(245, 158, 11, 0.14);
+  background: rgba(245, 158, 11, 0.10);
   color: #fde68a;
-  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  border-right: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .dayRow {
@@ -625,51 +756,106 @@
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
-  height: 28px;
+  height: 16px;
 }
 
 .dayCell {
   display: grid;
   place-items: center;
   color: var(--text-secondary);
-  font-size: 10px;
-  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 9px;
+  border-right: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .dayWeekend {
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.015);
 }
 
-.phaseRow {
-  --sticky-bg: #1c2535;
-  background: rgba(255, 255, 255, 0.035);
-  min-height: 52px;
-}
-
-.taskRow {
-  --sticky-bg: #111827;
-  min-height: 54px;
-}
-
-.taskRow:nth-child(even) {
-  --sticky-bg: #141d2d;
-  background: rgba(255, 255, 255, 0.012);
-}
+/* ============================================================
+   Timeline track & bars
+   ============================================================ */
 
 .cell {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 46px;
-  padding: 8px 10px;
+  gap: 6px;
+  min-height: 32px;
+  padding: 5px 8px;
   border-right: 1px solid rgba(255, 255, 255, 0.05);
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 
+.timelineCell {
+  position: relative;
+  min-height: 32px;
+  padding: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  cursor: grab;
+}
+
+.timelineTrack {
+  position: relative;
+  height: 100%;
+  min-height: 32px;
+  background-image: linear-gradient(to right, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+  contain: paint;
+}
+
+.weekDivider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.todayLine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: rgba(236, 72, 153, 0.9);
+  box-shadow: 0 0 12px rgba(236, 72, 153, 0.4);
+  z-index: 3;
+}
+
+.phaseBar,
+.taskBar {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.phaseBar {
+  height: 10px;
+  opacity: 0.5;
+}
+
+.taskBar {
+  height: 10px;
+  box-shadow: 0 4px 12px -6px rgba(0, 0, 0, 0.6);
+}
+
+.boardScrollerDragging .taskBar,
+.boardScrollerDragging .todayLine {
+  box-shadow: none;
+}
+
+.barFill {
+  height: 100%;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+/* ============================================================
+   Cell types — legacy (kept for export/modal refs)
+   ============================================================ */
+
 .cellCode {
   justify-content: center;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -690,7 +876,6 @@
   background: var(--sticky-bg);
   background-clip: padding-box;
   border-right: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: none;
 }
 
 .headerCellStickyCode,
@@ -705,8 +890,9 @@
 }
 
 .phaseTitle {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 800;
+  letter-spacing: 0.01em;
 }
 
 .taskTitle {
@@ -714,21 +900,21 @@
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 1;
   overflow: hidden;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 500;
   line-height: 1.3;
 }
 
 .phaseTaskCount {
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .cellOwner,
 .cellDate,
 .cellDuration {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 11px;
   white-space: nowrap;
 }
 
@@ -739,12 +925,12 @@
 .progressMeta {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .progressTrack {
   flex: 1;
-  height: 8px;
+  height: 5px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
   overflow: hidden;
@@ -756,82 +942,42 @@
 }
 
 .progressValue {
-  width: 38px;
+  width: 32px;
   text-align: right;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
 }
 
-.timelineCell {
-  position: relative;
-  min-height: 46px;
-  padding: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-  cursor: grab;
-}
+/* ============================================================
+   Badge styles
+   ============================================================ */
 
-.timelineTrack {
-  position: relative;
-  height: 100%;
-  min-height: 46px;
-  background-image: linear-gradient(to right, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
-  contain: paint;
-}
-
-.weekDivider {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: rgba(255, 255, 255, 0.09);
-}
-
-.todayLine {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: rgba(236, 72, 153, 0.9);
-  box-shadow: 0 0 16px rgba(236, 72, 153, 0.45);
-  z-index: 3;
-}
-
-.phaseBar,
-.taskBar {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
+.stateGroupBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
   border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  border: 1px solid;
+  white-space: nowrap;
   overflow: hidden;
+  max-width: 100%;
 }
 
-.phaseBar {
-  height: 18px;
+.phasePriorityDash {
+  color: var(--text-secondary);
+  font-size: 11px;
   opacity: 0.45;
-}
-
-.taskBar {
-  height: 14px;
-  box-shadow: 0 8px 20px -12px rgba(0, 0, 0, 0.65);
-}
-
-.boardScrollerDragging .taskBar,
-.boardScrollerDragging .todayLine {
-  box-shadow: none;
-}
-
-.barFill {
-  height: 100%;
-  background: rgba(255, 255, 255, 0.26);
 }
 
 .priorityBadge,
 .difficultyBadge {
   display: inline-flex;
   align-items: center;
-  padding: 3px 8px;
+  padding: 2px 6px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
 }
 
@@ -870,12 +1016,16 @@
   color: var(--text-secondary);
 }
 
+/* ============================================================
+   Empty / loading / error states
+   ============================================================ */
+
 .noResults {
   border: 1px dashed var(--border);
-  border-radius: 16px;
+  border-radius: 12px;
   color: var(--text-secondary);
   text-align: center;
-  padding: 44px 18px;
+  padding: 40px 18px;
 }
 
 .loadingWrap {
@@ -966,7 +1116,7 @@
   display: block;
   width: 100%;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 .taskTitleButton:hover .taskTitle {
@@ -978,7 +1128,7 @@
 
 .taskTitleButton:focus-visible {
   outline: 2px solid rgba(99, 102, 241, 0.7);
-  outline-offset: 3px;
+  outline-offset: 2px;
 }
 
 /* ============================================================
