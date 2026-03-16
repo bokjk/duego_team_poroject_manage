@@ -361,15 +361,209 @@ function formatDateForExport(date: Date): string {
   return formatDateInputValue(date);
 }
 
-function escapeCsvValue(value: string | number): string {
+function escapeSpreadsheetText(value: string | number): string {
   const raw = String(value);
-  const formulaSafe = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
-  const normalized = formulaSafe.replaceAll('"', '""');
-  return /[",\n]/.test(normalized) ? `"${normalized}"` : normalized;
+  const safe = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
+
+  return safe
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
-function buildCsvContent(rows: Array<Array<string | number>>): string {
-  return rows.map((row) => row.map((cell) => escapeCsvValue(cell)).join(",")).join("\n");
+function buildExportMonthGroups(
+  exportBuckets: Array<{ key: string; label: string; start: Date; end: Date }>,
+): Array<{ label: string; count: number }> {
+  const groups: Array<{ label: string; count: number }> = [];
+
+  for (const bucket of exportBuckets) {
+    const label = `${bucket.start.getFullYear()}년 ${bucket.start.getMonth() + 1}월`;
+    const last = groups[groups.length - 1];
+
+    if (last && last.label === label) {
+      last.count += 1;
+    } else {
+      groups.push({ label, count: 1 });
+    }
+  }
+
+  return groups;
+}
+
+function buildSpreadsheetMlContent({
+  projectName,
+  projectCode,
+  exportedAt,
+  rangeLabel,
+  timelineScale,
+  exportBuckets,
+  rows,
+}: {
+  projectName: string;
+  projectCode: string;
+  exportedAt: string;
+  rangeLabel: string;
+  timelineScale: string;
+  exportBuckets: Array<{ key: string; label: string; start: Date; end: Date }>;
+  rows: PresentationRow[];
+}): string {
+  const monthGroups = buildExportMonthGroups(exportBuckets);
+  const totalColumns = 11 + exportBuckets.length;
+  const buildCell = ({
+    value = "",
+    type = "String",
+    styleId = "Cell",
+    mergeAcross,
+    mergeDown,
+    index,
+  }: {
+    value?: string | number;
+    type?: "String" | "Number";
+    styleId?: string;
+    mergeAcross?: number;
+    mergeDown?: number;
+    index?: number;
+  }) => {
+    const attrs = [
+      index ? ` ss:Index="${index}"` : "",
+      styleId ? ` ss:StyleID="${styleId}"` : "",
+      mergeAcross !== undefined ? ` ss:MergeAcross="${mergeAcross}"` : "",
+      mergeDown !== undefined ? ` ss:MergeDown="${mergeDown}"` : "",
+    ].join("");
+    return `<Cell${attrs}><Data ss:Type="${type}">${escapeSpreadsheetText(value)}</Data></Cell>`;
+  };
+
+  const monthHeaderCells = monthGroups
+    .map((group) => buildCell({ value: group.label, styleId: "MonthBand", mergeAcross: group.count - 1 }))
+    .join("");
+
+  const weekHeaderCells = exportBuckets
+    .map((bucket, index) =>
+      buildCell({ value: bucket.label, styleId: "WeekBand", index: index === 0 ? 12 : undefined }),
+    )
+    .join("");
+
+  const bodyRows = rows
+    .map((row) => {
+      const ganttCells = buildExportGanttCells(row, exportBuckets)
+        .map((cell) => {
+          const styleId =
+            cell === "done"
+              ? "GanttDone"
+              : cell === "active"
+                ? "GanttActive"
+                : cell === "pending"
+                  ? "GanttPending"
+                  : "GanttEmpty";
+          return buildCell({ value: "", styleId });
+        })
+        .join("");
+
+      const rowStyle = row.kind === "phase" ? "PhaseCell" : "Cell";
+      const completionText = row.kind === "task" ? (row.group === "completed" ? "완료" : "미완료") : "";
+      const completionStyle = row.group === "completed" ? "CompletionDone" : "CompletionOpen";
+      const priorityText = row.kind === "task" ? row.priorityLabel : "";
+
+      return `<Row ss:AutoFitHeight="0" ss:Height="22">
+        ${buildCell({ value: row.wbsCode, styleId: `${rowStyle}Center` })}
+        ${buildCell({ value: row.kind === "phase" ? "상태 그룹" : "작업", styleId: `${rowStyle}Center` })}
+        ${buildCell({ value: STATE_GROUP_LABELS[row.group] ?? row.group, styleId: `${rowStyle}Center` })}
+        ${buildCell({ value: row.title, styleId: rowStyle })}
+        ${buildCell({ value: row.owner, styleId: rowStyle })}
+        ${buildCell({ value: formatDateForExport(row.start), styleId: `${rowStyle}Center` })}
+        ${buildCell({ value: formatDateForExport(row.end), styleId: `${rowStyle}Center` })}
+        ${buildCell({ value: row.durationDays, styleId: `${rowStyle}Center`, type: "Number" })}
+        ${buildCell({ value: row.progress, styleId: `${rowStyle}Center`, type: "Number" })}
+        ${buildCell({ value: completionText, styleId: completionText ? completionStyle : `${rowStyle}Center` })}
+        ${buildCell({ value: priorityText, styleId: `${rowStyle}Center` })}
+        ${ganttCells}
+      </Row>`;
+    })
+    .join("");
+
+  const columnWidths = [44, 58, 68, 210, 94, 72, 72, 54, 70, 74, 72, ...exportBuckets.map(() => 24)];
+  const columnsXml = columnWidths.map((width) => `<Column ss:AutoFitWidth="0" ss:Width="${width}"/>`).join("");
+  const rowCount = 4 + rows.length;
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:html="http://www.w3.org/TR/REC-html40">
+ <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">
+  <Author>OpenCode</Author>
+  <Created>${new Date().toISOString()}</Created>
+ </DocumentProperties>
+ <ExcelWorkbook xmlns="urn:schemas-microsoft-com:office:excel">
+  <ProtectStructure>False</ProtectStructure>
+  <ProtectWindows>False</ProtectWindows>
+ </ExcelWorkbook>
+ <Styles>
+  <Style ss:ID="Default" ss:Name="Normal">
+   <Alignment ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CFD7E6"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CFD7E6"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CFD7E6"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CFD7E6"/>
+   </Borders>
+   <Font ss:FontName="Malgun Gothic" ss:Size="10"/>
+  </Style>
+  <Style ss:ID="Title" ss:Parent="Default"><Font ss:FontName="Malgun Gothic" ss:Bold="1" ss:Size="16" ss:Color="#FFFFFF"/><Interior ss:Color="#162132" ss:Pattern="Solid"/><Alignment ss:Horizontal="Left" ss:Vertical="Center"/></Style>
+  <Style ss:ID="MetaHead" ss:Parent="Default"><Font ss:FontName="Malgun Gothic" ss:Bold="1"/><Interior ss:Color="#EDF2FB" ss:Pattern="Solid"/></Style>
+  <Style ss:ID="Legend" ss:Parent="Default"><Font ss:FontName="Malgun Gothic" ss:Size="9" ss:Color="#475569"/><Interior ss:Color="#F8FAFC" ss:Pattern="Solid"/></Style>
+  <Style ss:ID="HeaderFixed" ss:Parent="Default"><Font ss:FontName="Malgun Gothic" ss:Bold="1" ss:Color="#FFFFFF"/><Interior ss:Color="#0F172A" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/></Style>
+  <Style ss:ID="MonthBand" ss:Parent="Default"><Font ss:FontName="Malgun Gothic" ss:Bold="1" ss:Color="#1D4ED8"/><Interior ss:Color="#DBEAFE" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/></Style>
+  <Style ss:ID="WeekBand" ss:Parent="Default"><Font ss:FontName="Malgun Gothic" ss:Bold="1" ss:Color="#92400E"/><Interior ss:Color="#FEF3C7" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/></Style>
+  <Style ss:ID="Cell" ss:Parent="Default"><Alignment ss:Vertical="Center" ss:WrapText="1"/></Style>
+  <Style ss:ID="CellCenter" ss:Parent="Default"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/></Style>
+  <Style ss:ID="PhaseCell" ss:Parent="Default"><Font ss:FontName="Malgun Gothic" ss:Bold="1"/><Interior ss:Color="#EFF6FF" ss:Pattern="Solid"/><Alignment ss:Vertical="Center" ss:WrapText="1"/></Style>
+  <Style ss:ID="PhaseCellCenter" ss:Parent="PhaseCell"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/></Style>
+  <Style ss:ID="CompletionDone" ss:Parent="Default"><Font ss:FontName="Malgun Gothic" ss:Bold="1" ss:Color="#047857"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/></Style>
+  <Style ss:ID="CompletionOpen" ss:Parent="Default"><Font ss:FontName="Malgun Gothic" ss:Bold="1" ss:Color="#B45309"/><Alignment ss:Horizontal="Center" ss:Vertical="Center"/></Style>
+  <Style ss:ID="GanttDone" ss:Parent="Default"><Interior ss:Color="#2563EB" ss:Pattern="Solid"/></Style>
+  <Style ss:ID="GanttActive" ss:Parent="Default"><Interior ss:Color="#93C5FD" ss:Pattern="Solid"/></Style>
+  <Style ss:ID="GanttPending" ss:Parent="Default"><Interior ss:Color="#E5E7EB" ss:Pattern="Solid"/></Style>
+  <Style ss:ID="GanttEmpty" ss:Parent="Default"><Interior ss:Color="#FFFFFF" ss:Pattern="Solid"/></Style>
+ </Styles>
+ <Worksheet ss:Name="Schedule">
+  <Table ss:ExpandedColumnCount="${totalColumns}" ss:ExpandedRowCount="${rowCount}" x:FullColumns="1" x:FullRows="1">
+   ${columnsXml}
+   <Row ss:AutoFitHeight="0" ss:Height="28">${buildCell({ value: `${projectName} (${projectCode}) Schedule`, styleId: "Title", mergeAcross: totalColumns - 1 })}</Row>
+   <Row ss:AutoFitHeight="0" ss:Height="22">
+    ${buildCell({ value: `내보낸 시각: ${exportedAt}`, styleId: "MetaHead", mergeAcross: 3 })}
+    ${buildCell({ value: `조회 기간: ${rangeLabel}`, styleId: "MetaHead", mergeAcross: 3 })}
+    ${buildCell({ value: `타임라인 보기: ${timelineScale}`, styleId: "MetaHead", mergeAcross: 2 })}
+    ${buildCell({ value: `간트 표기: 파랑=완료 / 연파랑=진행중 / 회색=남음`, styleId: "Legend", mergeAcross: exportBuckets.length - 1 })}
+   </Row>
+   <Row ss:AutoFitHeight="0" ss:Height="22">
+    ${buildCell({ value: "WBS", styleId: "HeaderFixed", mergeDown: 1 })}
+    ${buildCell({ value: "구분", styleId: "HeaderFixed", mergeDown: 1 })}
+    ${buildCell({ value: "상태", styleId: "HeaderFixed", mergeDown: 1 })}
+    ${buildCell({ value: "작업명", styleId: "HeaderFixed", mergeDown: 1 })}
+    ${buildCell({ value: "담당자", styleId: "HeaderFixed", mergeDown: 1 })}
+    ${buildCell({ value: "시작일", styleId: "HeaderFixed", mergeDown: 1 })}
+    ${buildCell({ value: "종료일", styleId: "HeaderFixed", mergeDown: 1 })}
+    ${buildCell({ value: "기간(일)", styleId: "HeaderFixed", mergeDown: 1 })}
+    ${buildCell({ value: "진행률(%)", styleId: "HeaderFixed", mergeDown: 1 })}
+    ${buildCell({ value: "완료 여부", styleId: "HeaderFixed", mergeDown: 1 })}
+    ${buildCell({ value: "우선순위", styleId: "HeaderFixed", mergeDown: 1 })}
+    ${monthHeaderCells}
+   </Row>
+   <Row ss:AutoFitHeight="0" ss:Height="20">${weekHeaderCells}</Row>
+   ${bodyRows}
+  </Table>
+  <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+   <Selected/>
+   <ProtectObjects>False</ProtectObjects>
+   <ProtectScenarios>False</ProtectScenarios>
+  </WorksheetOptions>
+ </Worksheet>
+</Workbook>`;
 }
 
 function buildExportBucketHeaders(
@@ -380,7 +574,7 @@ function buildExportBucketHeaders(
   if (timelineScale === "month") {
     return weekMarkers.map((marker) => ({
       key: marker.key,
-      label: `${marker.start.getMonth() + 1}월 ${marker.compactLabel ?? marker.label}`,
+      label: `${marker.start.getFullYear()}년 ${marker.start.getMonth() + 1}월 ${marker.compactLabel ?? marker.label}`,
       start: marker.start,
       end: marker.end,
     }));
@@ -401,7 +595,7 @@ function doesRangeOverlap(start: Date, end: Date, rangeStart: Date, rangeEnd: Da
 function buildExportGanttCells(
   row: PresentationRow,
   exportBuckets: Array<{ key: string; label: string; start: Date; end: Date }>,
-): string[] {
+): Array<"done" | "active" | "pending" | "empty"> {
   const overlappingIndexes = exportBuckets
     .map((bucket, index) =>
       doesRangeOverlap(row.start, row.end, bucket.start, bucket.end) ? index : -1,
@@ -409,7 +603,7 @@ function buildExportGanttCells(
     .filter((index) => index >= 0);
 
   if (overlappingIndexes.length === 0) {
-    return exportBuckets.map(() => "");
+    return exportBuckets.map(() => "empty");
   }
 
   const completedBucketsFloat = (overlappingIndexes.length * row.progress) / 100;
@@ -420,20 +614,20 @@ function buildExportGanttCells(
 
   return exportBuckets.map((bucket, index) => {
     if (!overlappingIndexes.includes(index)) {
-      return "";
+      return "empty";
     }
 
     if (completedCount < completedBuckets) {
       completedCount += 1;
-      return "■";
+      return "done";
     }
 
     if (hasPartialBucket && !partialPlaced) {
       partialPlaced = true;
-      return "▨";
+      return "active";
     }
 
-    return "□";
+    return "pending";
   });
 }
 
@@ -1072,59 +1266,25 @@ export default function WbsPage() {
       timeline.days,
     );
 
-    const rows: Array<Array<string | number>> = [
-      ["프로젝트명", wbs.project.name],
-      ["프로젝트 코드", wbs.project.identifier],
-      ["내보낸 시각", formatKoreanFullDate(new Date())],
-      ["조회 기간", `${appliedFilters.dateFrom || "전체"} ~ ${appliedFilters.dateTo || "전체"}`],
-      ["타임라인 보기", timelineScale === "month" ? "월 단위" : "주 단위"],
-      ["간트 표기", "■ 완료된 진행 구간 / ▨ 진행중 구간 / □ 남은 진행 구간"],
-      [],
-      [
-        "WBS",
-        "구분",
-        "상태 그룹",
-        "작업명",
-        "담당자",
-        "시작일",
-        "종료일",
-        "기간(일)",
-        "진행률(%)",
-        "완료 여부",
-        "우선순위",
-        ...exportBuckets.map((bucket) => bucket.label),
-      ],
-    ];
+    const spreadsheetContent = buildSpreadsheetMlContent({
+      projectName: wbs.project.name,
+      projectCode: wbs.project.identifier,
+      exportedAt: formatKoreanFullDate(new Date()),
+      rangeLabel: `${appliedFilters.dateFrom || "전체"} ~ ${appliedFilters.dateTo || "전체"}`,
+      timelineScale: timelineScale === "month" ? "월 단위" : "주 단위",
+      exportBuckets,
+      rows: timeline.rows,
+    });
 
-    for (const row of timeline.rows) {
-      const ganttCells = buildExportGanttCells(row, exportBuckets);
-
-      rows.push([
-        row.wbsCode,
-        row.kind === "phase" ? "상태 그룹" : "작업",
-        STATE_GROUP_LABELS[row.group] ?? row.group,
-        row.title,
-        row.owner,
-        formatDateForExport(row.start),
-        formatDateForExport(row.end),
-        row.durationDays,
-        row.progress,
-        row.kind === "task" ? (row.group === "completed" ? "완료" : "미완료") : "",
-        row.kind === "task" ? row.priorityLabel : "",
-        ...ganttCells,
-      ]);
-    }
-
-    const csvContent = buildCsvContent(rows);
-    const blob = new Blob([`\uFEFF${csvContent}`], {
-      type: "text/csv;charset=utf-8;",
+    const blob = new Blob([`\uFEFF${spreadsheetContent}`], {
+      type: "application/xml;charset=utf-8;",
     });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     const fileDate = formatDateInputValue(new Date());
 
     link.href = url;
-    link.download = `${wbs.project.identifier}-wbs-${fileDate}.csv`;
+    link.download = `${wbs.project.identifier}-schedule-${fileDate}.xml`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
