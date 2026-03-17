@@ -49,6 +49,7 @@ export interface PlaneState {
 export interface PlaneWorkItem {
   id: string;
   name: string;
+  description_html?: string | null;
   state: string;
   assignees: string[];
   priority: string;
