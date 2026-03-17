@@ -40,6 +40,7 @@ type WbsRow = {
   completed_at: string | null;
   created_at: string;
   parent: string | null;
+  progress: number;
 };
 
 type WbsResponse = {
@@ -406,21 +407,6 @@ function getPriorityClassName(priority: string): string {
   }
 }
 
-function getProgressPercent(stateGroup: string): number {
-  switch (stateGroup) {
-    case "completed":
-      return 100;
-    case "started":
-      return 60;
-    case "unstarted":
-      return 20;
-    case "backlog":
-      return 5;
-    default:
-      return 0;
-  }
-}
-
 function makeToggler(setter: Dispatch<SetStateAction<string[]>>) {
   return (value: string) => {
     setter((previous) =>
@@ -687,7 +673,7 @@ function buildTimelineModel(rows: WbsRow[]): TimelineModel {
         start: normalizedStart,
         end: safeEnd,
         durationDays: differenceInBusinessDays(normalizedStart, safeEnd),
-        progress: getProgressPercent(entry.group),
+        progress: row.progress,
         priority: row.priority,
         priorityLabel: PRIORITY_LABELS[row.priority] ?? row.priority,
         difficultyLabel: DIFFICULTY_LABELS[row.difficulty] ?? row.difficulty,

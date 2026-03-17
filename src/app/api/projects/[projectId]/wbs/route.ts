@@ -12,6 +12,7 @@ import {
   getProjectEstimatePoints,
   getProjects,
 } from "@/lib/plane-api";
+import { parseProgressMarker } from "@/lib/parse-progress-marker";
 
 const LABEL_WEIGHT: Record<string, number> = { 하: 1, 중: 3, 상: 5 };
 const DEFAULT_WEIGHT = 1;
@@ -188,7 +189,23 @@ type WbsRow = {
   completed_at: string | null;
   created_at: string;
   parent: string | null;
+  progress: number;
 };
+
+function getFallbackProgress(stateGroup: string): number {
+  switch (stateGroup) {
+    case "completed":
+      return 100;
+    case "started":
+      return 60;
+    case "unstarted":
+      return 20;
+    case "backlog":
+      return 5;
+    default:
+      return 0;
+  }
+}
 
 export async function GET(
   request: Request,
@@ -346,6 +363,7 @@ export async function GET(
             : typeof workItem.parent === "string"
               ? workItem.parent
               : workItem.parent.id),
+        progress: parseProgressMarker(workItem.description_html) ?? getFallbackProgress(group),
       });
     }
 
