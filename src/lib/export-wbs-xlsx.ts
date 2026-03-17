@@ -115,7 +115,7 @@ function doesRangeOverlap(start: Date, end: Date, rangeStart: Date, rangeEnd: Da
 function buildExportGanttCells(
   row: ExportRow,
   exportBuckets: ExportBucket[],
-): Array<"done" | "active" | "pending" | "empty"> {
+): Array<"done" | "pending" | "empty"> {
   const overlappingIndexes = exportBuckets
     .map((bucket, index) =>
       doesRangeOverlap(row.start, row.end, bucket.start, bucket.end) ? index : -1,
@@ -126,11 +126,8 @@ function buildExportGanttCells(
     return exportBuckets.map(() => "empty");
   }
 
-  const completedBucketsFloat = (overlappingIndexes.length * row.progress) / 100;
-  const completedBuckets = Math.floor(completedBucketsFloat);
-  const hasPartialBucket = row.progress > 0 && row.progress < 100 && completedBucketsFloat > completedBuckets;
+  const completedBuckets = Math.round((overlappingIndexes.length * row.progress) / 100);
   let completedCount = 0;
-  let partialPlaced = false;
 
   return exportBuckets.map((_, index) => {
     if (!overlappingIndexes.includes(index)) {
@@ -140,11 +137,6 @@ function buildExportGanttCells(
     if (completedCount < completedBuckets) {
       completedCount += 1;
       return "done";
-    }
-
-    if (hasPartialBucket && !partialPlaced) {
-      partialPlaced = true;
-      return "active";
     }
 
     return "pending";
@@ -240,7 +232,7 @@ export async function buildWbsScheduleWorkbookBuffer({
     { col: 1, value: `내보낸 시각: ${exportedAt}` },
     { col: 5, value: `조회 기간: ${rangeLabel}` },
     { col: 9, value: `타임라인 보기: ${timelineScale}` },
-    { col: 12, value: `간트 표기: 파랑=완료 / 연파랑=진행중 / 회색=남음 / 주황 테두리=오늘(${formatDateForExport(today)})` },
+    { col: 12, value: `간트 표기: 파랑=완료 / 회색=남음 / 주황 테두리=오늘(${formatDateForExport(today)})` },
   ];
   for (const meta of metaCells) {
     const cell = sheet.getCell(2, meta.col);
@@ -339,7 +331,7 @@ export async function buildWbsScheduleWorkbookBuffer({
     exportBuckets.forEach((_, bucketIndex) => {
       const state = buildExportGanttCells(row, exportBuckets)[bucketIndex];
       const cell = sheet.getCell(excelRow, bucketIndex + 12);
-      styleCell(cell, { fill: state === "done" ? "#2563EB" : state === "active" ? "#93C5FD" : state === "pending" ? "#E5E7EB" : "#FFFFFF", align: "center" });
+      styleCell(cell, { fill: state === "done" ? "#2563EB" : state === "pending" ? "#E5E7EB" : "#FFFFFF", align: "center" });
       cell.value = "";
       if (todayBucketIndexes.includes(bucketIndex)) {
         applyTodayAccent(cell);
