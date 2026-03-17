@@ -890,11 +890,13 @@
 .phaseBar {
   height: 10px;
   opacity: 0.5;
+  background: rgba(255, 255, 255, 0.16);
 }
 
 .taskBar {
   height: 10px;
   box-shadow: 0 4px 12px -6px rgba(0, 0, 0, 0.6);
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .boardScrollerDragging .taskBar,
@@ -904,7 +906,8 @@
 
 .barFill {
   height: 100%;
-  background: rgba(255, 255, 255, 0.85);
+  border-radius: inherit;
+  filter: saturate(1.22) brightness(1.05);
 }
 
 /* ============================================================

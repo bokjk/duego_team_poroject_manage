@@ -1767,7 +1767,6 @@ export default function WbsPage() {
                     const barStyle: CSSProperties = {
                       left: `${effectiveBar.leftPct}%`,
                       width: `${effectiveBar.widthPct}%`,
-                      backgroundColor: row.barColor,
                     };
 
                     return (
@@ -1792,7 +1791,10 @@ export default function WbsPage() {
                               <span className={styles.todayLine} style={{ left: `${effectiveTodayPct}%` }} />
                             ) : null}
                             <div className={row.kind === "phase" ? styles.phaseBar : styles.taskBar} style={barStyle}>
-                              <div className={styles.barFill} style={{ width: `${row.progress}%` }} />
+                              <div
+                                className={styles.barFill}
+                                style={{ width: `${row.progress}%`, backgroundColor: row.barColor }}
+                              />
                             </div>
                           </div>
                         </div>
