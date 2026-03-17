@@ -1665,14 +1665,23 @@ export default function WbsPage() {
                         <span className={styles.phasePriorityDash}>—</span>
                       )}
                     </div>
-                    <div className={`${styles.frozenCell} ${styles.frozenProgressCell}`}>
-                      <div className={styles.progressTrack}>
-                        <div
-                          className={styles.progressFill}
-                          style={{ width: `${row.progress}%`, backgroundColor: row.barColor }}
-                        />
-                      </div>
-                      <span className={styles.progressValue}>{row.progress}%</span>
+                    <div
+                      className={`${styles.frozenCell} ${styles.frozenProgressCell}${row.kind === "task" && row.progress === 100 ? ` ${styles.progressComplete}` : ""}`}
+                    >
+                      {row.kind === "task" && row.progress === 100 ? (
+                        <span className={styles.progressDoneBadge}>✓ 완료</span>
+                      ) : (
+                        <>
+                          <div className={styles.progressTrack}>
+                            <div
+                              className={styles.progressFill}
+                              style={{ width: `${row.progress}%`, backgroundColor: row.barColor }}
+                            />
+                            <div className={styles.progressRemainder} />
+                          </div>
+                          <span className={styles.progressValue}>{row.progress}%</span>
+                        </>
+                      )}
                     </div>
                   </div>
                 ))}
