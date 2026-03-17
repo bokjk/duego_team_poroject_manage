@@ -33,6 +33,24 @@ type BuildWbsScheduleWorkbookArgs = {
 
 const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
 
+function startOfDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function isWeekend(date: Date): boolean {
+  return date.getDay() === 0 || date.getDay() === 6;
+}
+
+function moveToPreviousWorkday(date: Date): Date {
+  let cursor = startOfDay(date);
+
+  while (isWeekend(cursor)) {
+    cursor = new Date(cursor.getTime() - 24 * 60 * 60 * 1000);
+  }
+
+  return cursor;
+}
+
 function formatDateForExport(date: Date): string {
   const year = date.getFullYear();
   const month = `${date.getMonth() + 1}`.padStart(2, "0");
@@ -150,6 +168,15 @@ function applyFill(cell: ExcelJS.Cell, color: string) {
   };
 }
 
+function applyTodayAccent(cell: ExcelJS.Cell) {
+  cell.border = {
+    top: { style: "thick", color: { argb: "FFF97316" } },
+    left: { style: "thick", color: { argb: "FFF97316" } },
+    bottom: { style: "thick", color: { argb: "FFF97316" } },
+    right: { style: "thick", color: { argb: "FFF97316" } },
+  };
+}
+
 function styleCell(cell: ExcelJS.Cell, options?: { bold?: boolean; color?: string; fill?: string; align?: "left" | "center" }) {
   applyBorder(cell);
   cell.font = {
@@ -188,6 +215,10 @@ export async function buildWbsScheduleWorkbookBuffer({
 
   const monthGroups = buildExportMonthGroups(exportBuckets);
   const weekGroups = timelineScale === "주 단위" ? buildExportWeekGroups(exportBuckets) : [];
+  const today = moveToPreviousWorkday(new Date());
+  const todayBucketIndexes = exportBuckets
+    .map((bucket, index) => (doesRangeOverlap(today, today, bucket.start, bucket.end) ? index : -1))
+    .filter((index) => index >= 0);
   const columns = [44, 58, 68, 210, 94, 72, 72, 54, 70, 74, 72, ...exportBuckets.map(() => 24)];
   sheet.columns = columns.map((width) => ({ width: Math.max(width / 7, 4) }));
 
@@ -209,7 +240,7 @@ export async function buildWbsScheduleWorkbookBuffer({
     { col: 1, value: `내보낸 시각: ${exportedAt}` },
     { col: 5, value: `조회 기간: ${rangeLabel}` },
     { col: 9, value: `타임라인 보기: ${timelineScale}` },
-    { col: 12, value: "간트 표기: 파랑=완료 / 연파랑=진행중 / 회색=남음" },
+    { col: 12, value: `간트 표기: 파랑=완료 / 연파랑=진행중 / 회색=남음 / 주황 테두리=오늘(${formatDateForExport(today)})` },
   ];
   for (const meta of metaCells) {
     const cell = sheet.getCell(2, meta.col);
@@ -252,6 +283,9 @@ export async function buildWbsScheduleWorkbookBuffer({
       const cell = sheet.getCell(5, index + 12);
       cell.value = WEEKDAY_LABELS[bucket.start.getDay()] ?? "";
       styleCell(cell, { bold: true, color: "#FFFFFF", fill: "#1E293B", align: "center" });
+      if (todayBucketIndexes.includes(index)) {
+        applyTodayAccent(cell);
+      }
     });
     sheet.getRow(5).height = 18;
   } else {
@@ -259,6 +293,9 @@ export async function buildWbsScheduleWorkbookBuffer({
       const cell = sheet.getCell(4, index + 12);
       cell.value = bucket.label;
       styleCell(cell, { bold: true, color: "#92400E", fill: "#FEF3C7", align: "center" });
+      if (todayBucketIndexes.includes(index)) {
+        applyTodayAccent(cell);
+      }
     });
   }
   sheet.getRow(3).height = 22;
@@ -304,6 +341,9 @@ export async function buildWbsScheduleWorkbookBuffer({
       const cell = sheet.getCell(excelRow, bucketIndex + 12);
       styleCell(cell, { fill: state === "done" ? "#2563EB" : state === "active" ? "#93C5FD" : state === "pending" ? "#E5E7EB" : "#FFFFFF", align: "center" });
       cell.value = "";
+      if (todayBucketIndexes.includes(bucketIndex)) {
+        applyTodayAccent(cell);
+      }
     });
   });
 
