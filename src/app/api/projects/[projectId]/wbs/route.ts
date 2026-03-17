@@ -192,21 +192,6 @@ type WbsRow = {
   progress: number;
 };
 
-function getFallbackProgress(stateGroup: string): number {
-  switch (stateGroup) {
-    case "completed":
-      return 100;
-    case "started":
-      return 60;
-    case "unstarted":
-      return 20;
-    case "backlog":
-      return 5;
-    default:
-      return 0;
-  }
-}
-
 export async function GET(
   request: Request,
   context: { params: Promise<{ projectId: string }> },
@@ -363,7 +348,8 @@ export async function GET(
             : typeof workItem.parent === "string"
               ? workItem.parent
               : workItem.parent.id),
-        progress: parseProgressMarker(workItem.description_html) ?? getFallbackProgress(group),
+        progress:
+          parseProgressMarker(workItem.description_html) ?? (group === "completed" ? 100 : 0),
       });
     }
 
