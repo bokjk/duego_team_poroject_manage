@@ -31,6 +31,8 @@ type BuildWbsScheduleWorkbookArgs = {
   stateGroupLabels: Record<string, string>;
 };
 
+const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
+
 function formatDateForExport(date: Date): string {
   const year = date.getFullYear();
   const month = `${date.getMonth() + 1}`.padStart(2, "0");
@@ -50,6 +52,39 @@ function buildExportMonthGroups(exportBuckets: ExportBucket[]): Array<{ label: s
     } else {
       groups.push({ label, count: 1 });
     }
+  }
+
+  return groups;
+}
+
+function buildExportWeekGroups(exportBuckets: ExportBucket[]): Array<{ label: string; count: number }> {
+  const groups: Array<{ label: string; count: number }> = [];
+
+  let cursor = 0;
+  while (cursor < exportBuckets.length) {
+    const start = exportBuckets[cursor];
+    let end = start;
+    let count = 1;
+
+    while (
+      cursor + count < exportBuckets.length &&
+      count < 5 &&
+      exportBuckets[cursor + count].start.getMonth() === start.start.getMonth() &&
+      exportBuckets[cursor + count].start.getFullYear() === start.start.getFullYear()
+    ) {
+      end = exportBuckets[cursor + count];
+      count += 1;
+    }
+
+    groups.push({
+      label:
+        start.start.getMonth() === end.start.getMonth()
+          ? `${start.start.getMonth() + 1}/${start.start.getDate()}-${end.start.getDate()}`
+          : `${start.start.getMonth() + 1}/${start.start.getDate()}-${end.start.getMonth() + 1}/${end.start.getDate()}`,
+      count,
+    });
+
+    cursor += count;
   }
 
   return groups;
@@ -148,10 +183,11 @@ export async function buildWbsScheduleWorkbookBuffer({
   workbook.created = new Date();
 
   const sheet = workbook.addWorksheet("Schedule", {
-    views: [{ state: "frozen", xSplit: 11, ySplit: 4 }],
+    views: [{ state: "frozen", xSplit: 11, ySplit: timelineScale === "주 단위" ? 5 : 4 }],
   });
 
   const monthGroups = buildExportMonthGroups(exportBuckets);
+  const weekGroups = timelineScale === "주 단위" ? buildExportWeekGroups(exportBuckets) : [];
   const columns = [44, 58, 68, 210, 94, 72, 72, 54, 70, 74, 72, ...exportBuckets.map(() => 24)];
   sheet.columns = columns.map((width) => ({ width: Math.max(width / 7, 4) }));
 
@@ -183,8 +219,9 @@ export async function buildWbsScheduleWorkbookBuffer({
   sheet.getRow(2).height = 22;
 
   const fixedHeaders = ["WBS", "구분", "상태", "작업명", "담당자", "시작일", "종료일", "기간(일)", "진행률(%)", "완료 여부", "우선순위"];
+  const fixedHeaderMergeDown = timelineScale === "주 단위" ? 2 : 1;
   fixedHeaders.forEach((label, index) => {
-    sheet.mergeCells(3, index + 1, 4, index + 1);
+    sheet.mergeCells(3, index + 1, 3 + fixedHeaderMergeDown, index + 1);
     const cell = sheet.getCell(3, index + 1);
     cell.value = label;
     styleCell(cell, { bold: true, color: "#FFFFFF", fill: "#0F172A", align: "center" });
@@ -199,16 +236,36 @@ export async function buildWbsScheduleWorkbookBuffer({
     styleCell(cell, { bold: true, color: "#1D4ED8", fill: "#DBEAFE", align: "center" });
     currentColumn = endColumn + 1;
   }
-  exportBuckets.forEach((bucket, index) => {
-    const cell = sheet.getCell(4, index + 12);
-    cell.value = bucket.label;
-    styleCell(cell, { bold: true, color: "#92400E", fill: "#FEF3C7", align: "center" });
-  });
+
+  if (timelineScale === "주 단위") {
+    currentColumn = 12;
+    for (const group of weekGroups) {
+      const endColumn = currentColumn + group.count - 1;
+      sheet.mergeCells(4, currentColumn, 4, endColumn);
+      const cell = sheet.getCell(4, currentColumn);
+      cell.value = group.label;
+      styleCell(cell, { bold: true, color: "#92400E", fill: "#FEF3C7", align: "center" });
+      currentColumn = endColumn + 1;
+    }
+
+    exportBuckets.forEach((bucket, index) => {
+      const cell = sheet.getCell(5, index + 12);
+      cell.value = WEEKDAY_LABELS[bucket.start.getDay()] ?? "";
+      styleCell(cell, { bold: true, color: "#FFFFFF", fill: "#1E293B", align: "center" });
+    });
+    sheet.getRow(5).height = 18;
+  } else {
+    exportBuckets.forEach((bucket, index) => {
+      const cell = sheet.getCell(4, index + 12);
+      cell.value = bucket.label;
+      styleCell(cell, { bold: true, color: "#92400E", fill: "#FEF3C7", align: "center" });
+    });
+  }
   sheet.getRow(3).height = 22;
   sheet.getRow(4).height = 20;
 
   rows.forEach((row, rowIndex) => {
-    const excelRow = rowIndex + 5;
+    const excelRow = rowIndex + (timelineScale === "주 단위" ? 6 : 5);
     const excelJsRow = sheet.getRow(excelRow);
     excelJsRow.height = 22;
     const isPhase = row.kind === "phase";

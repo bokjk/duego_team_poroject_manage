@@ -366,7 +366,7 @@ function buildExportBucketHeaders(
   if (timelineScale === "month") {
     return weekMarkers.map((marker) => ({
       key: marker.key,
-      label: `${marker.start.getFullYear()}년 ${marker.start.getMonth() + 1}월 ${marker.compactLabel ?? marker.label}`,
+      label: marker.compactLabel ?? marker.label,
       start: marker.start,
       end: marker.end,
     }));
@@ -374,7 +374,7 @@ function buildExportBucketHeaders(
 
   return days.map((day) => ({
     key: day.key,
-    label: formatDateInputValue(day.date),
+    label: `${day.date.getDate()}`,
     start: day.date,
     end: day.date,
   }));
@@ -820,7 +820,7 @@ export default function WbsPage() {
     const defaults = getDefaultDateWindow();
     return { ...EMPTY_FILTERS, dateFrom: defaults.dateFrom, dateTo: defaults.dateTo };
   });
-  const [timelineScale, setTimelineScale] = useState<"week" | "month">("month");
+  const [timelineScale, setTimelineScale] = useState<"week" | "month">("week");
   const [timelineZoom, setTimelineZoom] = useState(0.75);
   const [selectedTask, setSelectedTask] = useState<TaskPresentationRow | null>(null);
 
